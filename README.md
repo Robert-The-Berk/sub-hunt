@@ -12,6 +12,9 @@ Open `index.html` in a browser to play. No build step.
 ## Sonar waterfall
 The waterfall shows what one passive buoy hears: bearing across, time going down, newest at the top. Pick the buoy from the tabs. Convoy ships, torpedoes and whales all leave traces, and white ticks mark the friendly bearings. The sub's trace appears even when it is too faint for a logged contact, so a weak line holding a steady bearing is worth acting on. Hover to read a bearing, and click to plot it on the map.
 
+## Plot pencil
+Press **4** or pick **Plot** to mark up the table yourself. It's free and doesn't use a turn. Click a square to drop a guess mark labelled with the current turn, and click it again to erase it. Drag to draw a course line with an arrowhead. **Undo** and **Clear plot** tidy up. Bearings plotted from the waterfall use the same pencil colour, and the replay shows your plot alongside the sub's real track.
+
 ## Replay
 When a hunt ends, **Watch replay** plays it back turn by turn: the sub's course, every buoy drop, ping return, bearing, torpedo and depth charge, with that turn's events underneath. Scrub with the slider or pause.
 

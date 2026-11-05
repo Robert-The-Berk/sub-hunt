@@ -19,6 +19,7 @@
   --amber: #f2b64e;
   --red: #ff6f5e;
   --bio: #a79fe0;
+  --pencil: #d4f27a;
   --f-display: 'Chakra Petch', 'Arial Narrow', 'Helvetica Neue', sans-serif;
   --f-body: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --f-mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
@@ -63,6 +64,10 @@ canvas#map { display: block; border: 1px solid var(--line); border-radius: 6px; 
 .tool.ping[aria-pressed="true"] { color: var(--amber); }
 .tool.buoy[aria-pressed="true"] { color: var(--phos); }
 .tool.charge[aria-pressed="true"] { color: var(--red); }
+.tool.plot[aria-pressed="true"] { color: var(--pencil); }
+.plotbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 13px; color: var(--muted); }
+.plotbar .hint { flex: 1; min-width: 200px; }
+.plotbar .hint b { color: var(--pencil); font-weight: 600; }
 .tool .k { font-family: var(--f-mono); font-size: 11px; color: var(--muted); border: 1px solid var(--line); border-radius: 3px; padding: 0 4px; }
 .tool .n { font-family: var(--f-mono); font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .tool:disabled { opacity: .45; cursor: not-allowed; }
@@ -150,9 +155,15 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
         <button class="tool ping" id="m-ping" aria-pressed="true" title="Give me a ping, Vasili."><span class="k">1</span>Active buoy <span class="n" id="n-ping">6</span></button>
         <button class="tool buoy" id="m-buoy" aria-pressed="false"><span class="k">2</span>Passive buoy <span class="n" id="n-buoy">8</span></button>
         <button class="tool charge" id="m-charge" aria-pressed="false"><span class="k">3</span><span id="charge-label">Depth charge</span> <span class="n" id="n-charge">6</span></button>
+        <button class="tool plot" id="m-plot" aria-pressed="false" title="Plot your own marks. Free, takes no turn."><span class="k">4</span>Plot</button>
         <span class="spacer"></span>
         <button class="tool" id="wait"><span class="k">W</span>Wait and listen</button>
         <button class="tool" id="mute" aria-pressed="false" title="Sound on or off">Sound on</button>
+      </div>
+      <div class="plotbar" id="plotbar" hidden>
+        <span class="hint"><b>Plot pencil</b> (free, no turn used): click a square to mark a guess, click it again to erase. Drag to draw a course line.</span>
+        <button class="small" id="plot-undo">Undo</button>
+        <button class="small" id="plot-clear">Clear plot</button>
       </div>
       <div class="replay" id="replay" hidden>
         <span class="rp-label">Replay</span>
@@ -224,6 +235,7 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
             <li><b>Depth charges</b> (red) hit a 3×3 area where the sub is now, before it moves. You can't drop one on top of a friendly ship.</li>
             <li><b>The convoy</b> (white hulls) sails east along the dashed route. The sub will close to within 8 nmi and fire torpedoes. A launch is loud: the targeted ship reports a red bearing and you can see the torpedo run, so you get one turn to answer. A sub that has just been pinged or charged is more cautious about firing.</li>
             <li>You lose if every ship is sunk, if you run out of charges, or if the sub reaches the escape line on the west edge.</li>
+            <li><b>Plot pencil</b> (key 4): mark where you think the sub is and draw its likely course. It's free and doesn't use a turn. Guess marks show the turn you made them, so a row of them traces a course.</li>
             <li>Every action takes one turn. After each turn the sub moves.</li>
             <li>When the hunt ends you can watch a replay of the sub's course, your buoys and every contact, turn by turn.</li>
           </ul>
@@ -273,7 +285,7 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
 
   function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { return null; } }
   let unlocked = store('subhunt.october') === '1';
-  let wfSel = null, wfHover = null;
+  let wfSel = null, wfHover = null, drag = null;
   let jonesy = false, muted = false, mode = 'ping', hover = null, cs = 20, S = null, anims = [], keybuf = '', RP = null;
 
   const rand = Math.random;
@@ -292,7 +304,7 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
   const C = {};
   function readColors() {
     const cs = getComputedStyle(document.documentElement);
-    ['phos', 'amber', 'red', 'bio', 'fg', 'muted', 'line', 'grid', 'sea1', 'sea2', 'rock', 'bg'].forEach(n => C[n] = cs.getPropertyValue('--' + n).trim());
+    ['phos', 'amber', 'red', 'bio', 'pencil', 'fg', 'muted', 'line', 'grid', 'sea1', 'sea2', 'rock', 'bg'].forEach(n => C[n] = cs.getPropertyValue('--' + n).trim());
   }
   function rgba(hex, a) {
     const h = hex.replace('#', '');
@@ -352,10 +364,10 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
       T, tid, hidden, rocks, label, lane, ships, torps: [], subTorps: T.torps, cool: 0, atk: null, fired: false,
       sub: { x: sx, y: sy, ty: 2 + Math.floor(rand() * (ROWS - 4)), acc: 0, spd: T.cruise },
       trail: [[sx, sy]], alert: 0, noise: null, ivan: 0, ivanNow: false, ivanSaid: false, octSaid: false,
-      turn: 0, pings: 0, actives: 0, activeLeft: ACTIVE_BUOYS, heard: [], buoys: [], buoysLeft: BUOYS, charges: CHARGES, marks: [], allMarks: [], hist: [], log: [], over: null, contacts: 0, lastContact: null
+      turn: 0, pings: 0, actives: 0, activeLeft: ACTIVE_BUOYS, heard: [], buoys: [], buoysLeft: BUOYS, charges: CHARGES, marks: [], allMarks: [], hist: [], plot: [], log: [], over: null, contacts: 0, lastContact: null
     };
     stopReplay();
-    wfSel = null; wfHover = null;
+    wfSel = null; wfHover = null; drag = null;
     $('#overlay').hidden = true;
     $('#charge-label').textContent = tid === 'october' ? 'Hail' : 'Depth charge';
     if (tid === 'october') {
@@ -839,7 +851,9 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
   }
   function setMode(m) {
     mode = m;
-    ['ping', 'buoy', 'charge'].forEach(k => $('#m-' + k).setAttribute('aria-pressed', String(k === m)));
+    ['ping', 'buoy', 'charge', 'plot'].forEach(k => $('#m-' + k).setAttribute('aria-pressed', String(k === m)));
+    $('#plotbar').hidden = m !== 'plot';
+    cv.style.touchAction = m === 'plot' ? 'none' : 'manipulation';
     render();
   }
   function buildMissions(keep) {
@@ -876,7 +890,8 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
       turn: t, replaying: t < S.turn, sub: { x: h.sub[0], y: h.sub[1] }, ships: h.ships, torps: h.torps,
       buoys: S.buoys.filter(b => b.born <= t),
       marks: S.allMarks.filter(m => m.born <= t && t - m.born <= MAX_AGE).map(m => Object.assign({}, m, { age: t - m.born })),
-      trail: S.hist.slice(0, t + 1).filter(Boolean).map(x => x.sub)
+      trail: S.hist.slice(0, t + 1).filter(Boolean).map(x => x.sub),
+      plot: S.plot.filter(q => q.t <= t)
     });
   }
   const view = () => RP ? replayView(RP.t) : S;
@@ -988,7 +1003,7 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
         ctx.fillStyle = rgba(C.amber, fade); ctx.beginPath(); ctx.arc(cx, cy, 3, 0, Math.PI * 2); ctx.fill();
       } else if (m.k === 'brg' && m.manual) {
         const R = PASSIVE_R * cs, a = m.ang - Math.PI / 2;
-        ctx.strokeStyle = rgba(C.fg, 0.75 * fade); ctx.lineWidth = 1.25; ctx.setLineDash([6, 4]);
+        ctx.strokeStyle = rgba(C.pencil, 0.8 * fade); ctx.lineWidth = 1.25; ctx.setLineDash([6, 4]);
         ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + Math.cos(a) * R, cy + Math.sin(a) * R); ctx.stroke(); ctx.setLineDash([]);
       } else if (m.k === 'brg') {
         const col = m.bio ? C.bio : m.torp ? C.red : C.phos;
@@ -1061,6 +1076,28 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
       ctx.fillStyle = C.red; ctx.beginPath(); ctx.arc(cxp(t.x), cyp(t.y), Math.max(3, cs * 0.16), 0, Math.PI * 2); ctx.fill();
     });
 
+    // plot pencil
+    const arrow = (x0, y0, x1, y1, col, a) => {
+      const X0 = cxp(x0), Y0 = cyp(y0), X1 = cxp(x1), Y1 = cyp(y1), ang = Math.atan2(Y1 - Y0, X1 - X0), hl = Math.max(7, cs * 0.45);
+      ctx.strokeStyle = rgba(col, a); ctx.fillStyle = rgba(col, a); ctx.lineWidth = 2; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(X0, Y0); ctx.lineTo(X1 - Math.cos(ang) * hl * 0.6, Y1 - Math.sin(ang) * hl * 0.6); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(X1, Y1);
+      ctx.lineTo(X1 - Math.cos(ang - 0.45) * hl, Y1 - Math.sin(ang - 0.45) * hl);
+      ctx.lineTo(X1 - Math.cos(ang + 0.45) * hl, Y1 - Math.sin(ang + 0.45) * hl); ctx.closePath(); ctx.fill();
+      ctx.lineCap = 'butt';
+    };
+    S.plot.forEach(q => {
+      if (q.k === 'line') { arrow(q.x0, q.y0, q.x1, q.y1, C.pencil, 0.85); return; }
+      const X = cxp(q.x), Y = cyp(q.y), rr = cs * 0.36;
+      ctx.strokeStyle = C.pencil; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(X, Y, rr, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(X - rr * 0.5, Y); ctx.lineTo(X + rr * 0.5, Y); ctx.moveTo(X, Y - rr * 0.5); ctx.lineTo(X, Y + rr * 0.5); ctx.stroke();
+      ctx.fillStyle = C.pencil; ctx.textAlign = 'left'; ctx.textBaseline = 'bottom';
+      ctx.font = `600 ${Math.max(9, cs * 0.38)}px 'IBM Plex Mono', monospace`;
+      ctx.fillText('T' + q.t, X + rr * 0.8, Y - rr * 0.6);
+    });
+    if (drag && (drag.b.x !== drag.a.x || drag.b.y !== drag.a.y)) arrow(drag.a.x, drag.a.y, drag.b.x, drag.b.y, C.pencil, 0.55);
+
     // waterfall cursor preview
     if (wfHover) {
       const b = S.buoys.find(x => x.id === wfHover.id);
@@ -1083,7 +1120,7 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
       if (mode === 'buoy') { ctx.strokeStyle = rgba(C.phos, 0.5); ctx.beginPath(); ctx.arc(cx, cy, PASSIVE_R * cs, 0, Math.PI * 2); ctx.stroke(); }
       if (mode === 'charge') { ctx.strokeStyle = rgba(C.red, 0.8); ctx.strokeRect(px(hover.x - 1), py(hover.y - 1), cs * 3, cs * 3); }
       ctx.setLineDash([]);
-      const col = mode === 'ping' ? C.amber : mode === 'buoy' ? C.phos : C.red;
+      const col = mode === 'ping' ? C.amber : mode === 'buoy' ? C.phos : mode === 'plot' ? C.pencil : C.red;
       ctx.strokeStyle = col; ctx.lineWidth = 1.5; ctx.strokeRect(px(hover.x) + 1, py(hover.y) + 1, cs - 2, cs - 2);
     }
 
@@ -1123,9 +1160,35 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
   }
 
   // ---------- events ----------
-  cv.addEventListener('pointermove', e => { const c = cellAt(e); if (!hover || !c || c.x !== hover.x || c.y !== hover.y) { hover = c; render(); } });
-  cv.addEventListener('pointerleave', () => { hover = null; render(); });
-  cv.addEventListener('click', e => { const c = cellAt(e); if (c) act(mode, c); });
+  const canPlot = () => S && !S.over && !RP && mode === 'plot';
+  cv.addEventListener('pointerdown', e => {
+    if (!canPlot()) return;
+    const c = cellAt(e); if (!c) return;
+    drag = { a: c, b: c };
+    try { cv.setPointerCapture(e.pointerId); } catch (err) { /* not supported */ }
+    e.preventDefault();
+  });
+  cv.addEventListener('pointermove', e => {
+    const c = cellAt(e);
+    if (drag) { if (c && (c.x !== drag.b.x || c.y !== drag.b.y)) { drag.b = c; hover = c; render(); } return; }
+    if (!hover || !c || c.x !== hover.x || c.y !== hover.y) { hover = c; render(); }
+  });
+  cv.addEventListener('pointerup', () => {
+    if (!drag) return;
+    const { a, b } = drag; drag = null;
+    if (!canPlot()) return render();
+    if (a.x === b.x && a.y === b.y) {
+      const i = S.plot.findIndex(q => q.k === 'x' && q.x === a.x && q.y === a.y);
+      if (i >= 0) S.plot.splice(i, 1); else S.plot.push({ k: 'x', x: a.x, y: a.y, t: S.turn });
+    } else S.plot.push({ k: 'line', x0: a.x, y0: a.y, x1: b.x, y1: b.y, t: S.turn });
+    render();
+  });
+  cv.addEventListener('pointercancel', () => { drag = null; render(); });
+  cv.addEventListener('pointerleave', () => { if (!drag) { hover = null; render(); } });
+  cv.addEventListener('click', e => { if (mode === 'plot') return; const c = cellAt(e); if (c) act(mode, c); });
+  $('#m-plot').addEventListener('click', () => setMode('plot'));
+  $('#plot-undo').addEventListener('click', () => { if (canPlot() && S.plot.length) { S.plot.pop(); render(); } });
+  $('#plot-clear').addEventListener('click', () => { if (canPlot() && S.plot.length) { S.plot = []; render(); } });
   $('#m-ping').addEventListener('click', () => setMode('ping'));
   $('#m-buoy').addEventListener('click', () => setMode('buoy'));
   $('#m-charge').addEventListener('click', () => setMode('charge'));
@@ -1159,6 +1222,7 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
     if (e.key === '1') setMode('ping');
     else if (e.key === '2') setMode('buoy');
     else if (e.key === '3') setMode('charge');
+    else if (e.key === '4') setMode('plot');
     else if (e.key === 'w' || e.key === 'W' || e.key === ' ') { if (e.key === ' ') e.preventDefault(); act('wait'); }
   });
 
