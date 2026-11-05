@@ -1,0 +1,755 @@
+<title>Sub Hunt</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: a sonar plotting table on the left, the operator's panel on the right; one deliberate dark console look */
+:root {
+  --bg: #061219;
+  --panel: #0a1b24;
+  --line: #17323f;
+  --grid: #0e2733;
+  --sea1: #0a2531;
+  --sea2: #041119;
+  --rock: #2a4650;
+  --fg: #d7e8ea;
+  --muted: #84a0a8;
+  --phos: #6fd8c9;
+  --amber: #f2b64e;
+  --red: #ff6f5e;
+  --bio: #a79fe0;
+  --f-display: 'Chakra Petch', 'Arial Narrow', 'Helvetica Neue', sans-serif;
+  --f-body: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --f-mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+  color-scheme: dark;
+}
+html, body { background: var(--bg); color: var(--fg); }
+[hidden] { display: none !important; }
+body {
+  font-family: var(--f-body);
+  font-size: 14px;
+  line-height: 1.45;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 18px 36px;
+}
+.wrap { max-width: 1200px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+
+header { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px; }
+.brand { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.eyebrow { font-family: var(--f-mono); font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--phos); }
+h1 { font-family: var(--f-display); font-weight: 700; font-size: clamp(30px, 5vw, 44px); line-height: 1; margin: 0; letter-spacing: .02em; text-wrap: balance; }
+.tagline { color: var(--muted); margin: 4px 0 0; max-width: 60ch; }
+
+.layout { display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 16px; align-items: start; }
+@media (max-width: 920px) { .layout { grid-template-columns: minmax(0, 1fr); } }
+
+.board { position: relative; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+.mapbox { position: relative; }
+canvas#map { display: block; width: 100%; border: 1px solid var(--line); border-radius: 6px; background: var(--sea2); cursor: crosshair; touch-action: manipulation; }
+
+.tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.tool {
+  font-family: var(--f-display); font-weight: 600; font-size: 15px; letter-spacing: .04em;
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 9px 14px; border-radius: 6px; border: 1px solid var(--line);
+  background: var(--panel); color: var(--fg); cursor: pointer;
+}
+.tool:hover { border-color: var(--muted); }
+.tool:focus-visible, select:focus-visible, .small:focus-visible { outline: 2px solid var(--phos); outline-offset: 2px; }
+.tool[aria-pressed="true"] { border-color: currentColor; background: var(--sea1); }
+.tool.ping[aria-pressed="true"] { color: var(--amber); }
+.tool.buoy[aria-pressed="true"] { color: var(--phos); }
+.tool.charge[aria-pressed="true"] { color: var(--red); }
+.tool .k { font-family: var(--f-mono); font-size: 11px; color: var(--muted); border: 1px solid var(--line); border-radius: 3px; padding: 0 4px; }
+.tool .n { font-family: var(--f-mono); font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.tool:disabled { opacity: .45; cursor: not-allowed; }
+.spacer { flex: 1; }
+.flash { min-height: 20px; font-family: var(--f-mono); font-size: 12px; color: var(--amber); }
+
+aside { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 14px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.card h2 { font-family: var(--f-display); font-size: 13px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); margin: 0; }
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+select { flex: 1; min-width: 0; font: 500 14px var(--f-body); color: var(--fg); background: var(--sea2); border: 1px solid var(--line); border-radius: 5px; padding: 8px; }
+.small { font: 600 13px var(--f-display); letter-spacing: .04em; padding: 8px 12px; border-radius: 5px; border: 1px solid var(--line); background: var(--sea1); color: var(--fg); cursor: pointer; }
+.small:hover { border-color: var(--muted); }
+
+.dossier-name { font-family: var(--f-display); font-size: 22px; font-weight: 700; line-height: 1.1; }
+.dossier-cls { color: var(--muted); font-size: 13px; }
+.dossier-blurb { font-size: 13px; color: var(--fg); opacity: .85; margin: 0; }
+.stats { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; align-items: center; font-size: 13px; }
+.stats dt { color: var(--muted); }
+.stats dd { margin: 0; display: flex; align-items: center; gap: 8px; font-family: var(--f-mono); font-size: 12px; }
+.pips { display: inline-flex; gap: 3px; }
+.pips i { width: 14px; height: 6px; border-radius: 1px; background: var(--line); }
+.pips.amber i.on { background: var(--amber); }
+.pips.phos i.on { background: var(--phos); }
+
+.status { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.status div { display: flex; flex-direction: column; gap: 2px; }
+.status b { font-family: var(--f-mono); font-size: 18px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.status span { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+
+.log { list-style: none; margin: 0; padding: 0; max-height: 300px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+.log li { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 6px; }
+.log .t { font-family: var(--f-mono); font-size: 11px; color: var(--muted); padding-top: 2px; }
+.log .amber { color: var(--amber); }
+.log .phos { color: var(--phos); }
+.log .red { color: var(--red); }
+.log .bio { color: var(--bio); }
+.log .dim { color: var(--muted); }
+.log .quote { color: var(--fg); font-style: italic; }
+
+details.help summary { cursor: pointer; font-family: var(--f-display); font-weight: 600; letter-spacing: .08em; text-transform: uppercase; font-size: 13px; color: var(--muted); }
+details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+
+.overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 16px; pointer-events: none; }
+.overlay .box { pointer-events: auto; background: color-mix(in srgb, var(--bg) 92%, transparent); border: 1px solid var(--line); border-radius: 8px; padding: 18px 20px; max-width: 420px; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 12px 40px rgba(0,0,0,.5); }
+.overlay h3 { font-family: var(--f-display); font-size: 26px; margin: 0; line-height: 1.05; }
+.overlay h3.win { color: var(--phos); }
+.overlay h3.lose { color: var(--red); }
+.overlay p { margin: 0; }
+.overlay .ach { font-size: 13px; color: var(--amber); }
+.overlay .meta { font-family: var(--f-mono); font-size: 12px; color: var(--muted); }
+
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <span class="eyebrow">ASW plotting table · 2 nmi grid</span>
+      <h1>Sub Hunt</h1>
+      <p class="tagline">A submarine is running west for the escape line. Ping it, listen for it, and sink it before it gets away.</p>
+    </div>
+  </header>
+
+  <div class="layout">
+    <section class="board" aria-label="Plotting table">
+      <div class="mapbox" id="mapbox">
+        <canvas id="map" aria-label="Ocean grid. Click a square to use the selected sensor or weapon."></canvas>
+        <div class="overlay" id="overlay" hidden><div class="box" id="overlayBox"></div></div>
+      </div>
+      <div class="tools">
+        <button class="tool ping" id="m-ping" aria-pressed="true" title="Give me a ping, Vasili."><span class="k">1</span>Active ping</button>
+        <button class="tool buoy" id="m-buoy" aria-pressed="false"><span class="k">2</span>Drop buoy <span class="n" id="n-buoy">5</span></button>
+        <button class="tool charge" id="m-charge" aria-pressed="false"><span class="k">3</span><span id="charge-label">Depth charge</span> <span class="n" id="n-charge">4</span></button>
+        <span class="spacer"></span>
+        <button class="tool" id="wait"><span class="k">W</span>Wait and listen</button>
+        <button class="tool" id="mute" aria-pressed="false" title="Sound on or off">Sound on</button>
+      </div>
+      <div class="flash" id="flash" role="status" aria-live="polite"></div>
+    </section>
+
+    <aside>
+      <div class="card">
+        <h2>Mission</h2>
+        <div class="row">
+          <select id="mission" aria-label="Choose a target"></select>
+          <button class="small" id="new">New hunt</button>
+        </div>
+      </div>
+
+      <div class="card" id="dossier">
+        <h2>Target dossier</h2>
+        <div>
+          <div class="dossier-name" id="d-name"></div>
+          <div class="dossier-cls" id="d-cls"></div>
+        </div>
+        <p class="dossier-blurb" id="d-blurb"></p>
+        <dl class="stats">
+          <dt>Size</dt><dd id="d-size"></dd>
+          <dt>Speed</dt><dd id="d-speed"></dd>
+          <dt>Active sonar</dt><dd id="d-active"></dd>
+          <dt>Passive sonar</dt><dd id="d-passive"></dd>
+        </dl>
+      </div>
+
+      <div class="card">
+        <h2>Watch</h2>
+        <div class="status">
+          <div><b id="s-turn">0</b><span>Turn</span></div>
+          <div><b id="s-pings">0</b><span>Pings</span></div>
+          <div><b id="s-contacts">0</b><span>Contacts</span></div>
+          <div><b id="s-last">–</b><span>Last</span></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Sonar log</h2>
+        <ul class="log" id="log"></ul>
+      </div>
+
+      <div class="card">
+        <details class="help">
+          <summary>How to play</summary>
+          <ul>
+            <li><b>Active ping</b> (amber): click a square. If the sub is within 10 nmi (5 squares), you may get a return showing its range as a ring. Big subs echo reliably; small ones often don't. Pinging also warns the sub, so it speeds up and dodges.</li>
+            <li><b>No return</b> doesn't prove the sub isn't there. A small sub can sit inside the circle and still not echo.</li>
+            <li><b>Sonobuoys</b> (teal) listen silently every turn up to 16 nmi away and report a bearing, not a range. Fast subs are loud; slow ones are hard to hear.</li>
+            <li><b>Depth charges</b> (red) hit a 3×3 area where the sub is now, before it moves. Run out of charges or let it reach the escape line on the west edge and you lose.</li>
+            <li>Every action takes one turn. After each turn the sub moves.</li>
+          </ul>
+        </details>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<script>
+(() => {
+  const COLS = 24, ROWS = 16, ACTIVE_R = 5, PASSIVE_R = 8, NM = 2, MAX_AGE = 6;
+  const LM = 24, TM = 18;
+
+  const TYPES = {
+    leviathan: { name: 'Leviathan', cls: 'Ballistic missile submarine', size: 'Huge', sizeN: 4, speedLabel: 'Medium',
+      cruise: 0.55, sprint: 0.85, noise: 1.0, activeP: 0.95,
+      blurb: 'A giant missile boat. It echoes like a cathedral on active sonar, and it is loud enough to hear when it hurries.' },
+    whisper: { name: 'Whisper', cls: 'Diesel-electric attack boat', size: 'Medium', sizeN: 3, speedLabel: 'Slow',
+      cruise: 0.45, sprint: 0.8, noise: 0.85, activeP: 0.75,
+      blurb: 'Running on batteries it is almost silent. Pings will usually find it; buoys will struggle.' },
+    barracuda: { name: 'Barracuda', cls: 'Fast attack submarine', size: 'Small', sizeN: 2, speedLabel: 'Fast',
+      cruise: 1.0, sprint: 1.4, noise: 1.0, activeP: 0.5,
+      blurb: 'Small and quick. Its screws scream on passive sonar, but its hull often slips past a ping.' },
+    minnow: { name: 'Minnow', cls: 'Midget submarine', size: 'Tiny', sizeN: 1, speedLabel: 'Very slow',
+      cruise: 0.35, sprint: 0.6, noise: 0.8, activeP: 0.3,
+      blurb: 'Tiny and patient. Hard to hear, hard to echo. It takes a long time to reach the line, so you will need that time.' },
+    october: { name: 'Red October', cls: 'Typhoon-class, caterpillar drive', size: 'Huge', sizeN: 4, speedLabel: 'Medium',
+      cruise: 0.6, sprint: 0.8, noise: 0.1, activeP: 0.95, secret: true,
+      blurb: 'Captain Marko Ramius is running west. The caterpillar drive makes her nearly silent. Moscow wants her sunk. Find her first and hail her.' }
+  };
+  const MISSIONS = [
+    ['leviathan', 'Leviathan, missile sub (easy)'],
+    ['whisper', 'Whisper, diesel boat (medium)'],
+    ['barracuda', 'Barracuda, attack sub (medium)'],
+    ['minnow', 'Minnow, midget sub (hard)'],
+    ['random', 'Unknown contact (random)'],
+    ['october', 'Red October (classified)']
+  ];
+
+  const $ = s => document.querySelector(s);
+  const cv = $('#map'), ctx = cv.getContext('2d');
+  const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { return null; } }
+  let unlocked = store('subhunt.october') === '1';
+  let jonesy = false, muted = false, mode = 'ping', hover = null, cs = 20, S = null, anims = [], keybuf = '';
+
+  const rand = Math.random;
+  const gauss = () => { let u = 0, v = 0; while (!u) u = rand(); while (!v) v = rand(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); };
+  const key = (x, y) => x + ',' + y;
+  const gridName = c => String.fromCharCode(65 + c.x) + (c.y + 1);
+  const deg = a => { let d = Math.round(a * 180 / Math.PI) % 360; if (d < 0) d += 360; return String(d).padStart(3, '0'); };
+  const loud = T => T.noise * Math.pow(T.cruise, 1.5);
+  const activeLvl = T => T.activeP >= .9 ? 4 : T.activeP >= .7 ? 3 : T.activeP >= .45 ? 2 : 1;
+  const passiveLvl = T => { const L = loud(T); return L >= .8 ? 4 : L >= .35 ? 3 : L >= .2 ? 2 : 1; };
+  const LVL = ['', 'Very hard', 'Hard', 'Fair', 'Easy'];
+
+  // ---------- colors from tokens ----------
+  const C = {};
+  function readColors() {
+    const cs = getComputedStyle(document.documentElement);
+    ['phos', 'amber', 'red', 'bio', 'fg', 'muted', 'line', 'grid', 'sea1', 'sea2', 'rock', 'bg'].forEach(n => C[n] = cs.getPropertyValue('--' + n).trim());
+  }
+  function rgba(hex, a) {
+    const h = hex.replace('#', '');
+    const n = parseInt(h.length === 3 ? h.split('').map(c => c + c).join('') : h, 16);
+    return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
+  }
+
+  // ---------- sound ----------
+  let actx = null;
+  function tone(freq, dur, vol, delay = 0, type = 'sine') {
+    if (muted) return;
+    try {
+      actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+      const t = actx.currentTime + delay;
+      const o = actx.createOscillator(), g = actx.createGain();
+      o.type = type; o.frequency.setValueAtTime(freq, t);
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(vol, t + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o.connect(g).connect(actx.destination);
+      o.start(t); o.stop(t + dur + 0.05);
+    } catch (e) { /* audio unavailable */ }
+  }
+
+  // ---------- setup ----------
+  function genRocks() {
+    const rocks = new Set();
+    const cx = 8 + Math.floor(rand() * 6), cy = 3 + Math.floor(rand() * (ROWS - 8));
+    const twins = [[cx, cy], [cx + 2 + Math.floor(rand() * 2), cy + 3 + Math.floor(rand() * 2)]];
+    twins.forEach(([x, y]) => [[0, 0], [1, 0], [0, 1], [1, 1]].forEach(([dx, dy]) => {
+      if ((dx === 0 && dy === 0) || rand() < 0.85) rocks.add(key(x + dx, y + dy));
+    }));
+    for (let i = 0; i < 4; i++) rocks.add(key(3 + Math.floor(rand() * (COLS - 10)), Math.floor(rand() * ROWS)));
+    return { rocks, label: { x: cx + 1, y: cy } };
+  }
+
+  function newGame() {
+    const mission = $('#mission').value;
+    let tid = mission, hidden = false;
+    if (mission === 'october' && !unlocked) tid = 'leviathan';
+    if (mission === 'random') { const pool = ['leviathan', 'whisper', 'barracuda', 'minnow']; tid = pool[Math.floor(rand() * pool.length)]; hidden = true; }
+    const T = TYPES[tid];
+    const { rocks, label } = genRocks();
+    let sx, sy;
+    do { sx = COLS - 2 - Math.floor(rand() * 4); sy = 1 + Math.floor(rand() * (ROWS - 2)); } while (rocks.has(key(sx, sy)));
+    S = {
+      T, tid, hidden, rocks, label,
+      sub: { x: sx, y: sy, ty: 2 + Math.floor(rand() * (ROWS - 4)), acc: 0, spd: T.cruise },
+      trail: [[sx, sy]], alert: 0, noise: null, ivan: 0, ivanNow: false, ivanSaid: false, octSaid: false,
+      turn: 0, pings: 0, buoys: [], buoysLeft: 5, charges: 4, marks: [], log: [], over: null, contacts: 0, lastContact: null
+    };
+    $('#overlay').hidden = true;
+    $('#charge-label').textContent = tid === 'october' ? 'Hail' : 'Depth charge';
+    if (tid === 'october') {
+      log('Intel: Red October left port and is running west for the escape line. Hail her before she crosses.', 'dim');
+      log('Jonesy: Sonar manned and ready, Captain. If she is on the caterpillar, I will barely hear her.', 'quote');
+    } else if (hidden) {
+      log('Intel: unknown submarine heading west for the escape line. Classify it from what your sensors hear, then sink it.', 'dim');
+    } else {
+      log(`Intel: a ${T.cls.toLowerCase()} is heading west for the escape line. Sink it before it gets there.`, 'dim');
+    }
+    setMode('ping');
+    updateUI(); render();
+  }
+
+  // ---------- log ----------
+  function log(text, kind = '') {
+    S.log.unshift({ t: S.turn, text, kind });
+    if (S.log.length > 80) S.log.pop();
+  }
+  function renderLog() {
+    const ul = $('#log');
+    ul.innerHTML = '';
+    S.log.forEach(e => {
+      const li = document.createElement('li');
+      const t = document.createElement('span'); t.className = 't'; t.textContent = 'T' + String(e.t).padStart(2, '0');
+      const m = document.createElement('span'); m.className = e.kind; m.textContent = e.text;
+      li.append(t, m); ul.append(li);
+    });
+  }
+  let flashTimer = null;
+  function flash(msg) {
+    const f = $('#flash'); f.textContent = msg;
+    clearTimeout(flashTimer); flashTimer = setTimeout(() => f.textContent = '', 2600);
+  }
+
+  // ---------- turn ----------
+  function act(kind, c) {
+    if (!S || S.over) return;
+    if (kind === 'buoy') {
+      if (S.buoysLeft <= 0) return flash('No sonobuoys left.');
+      if (S.rocks.has(key(c.x, c.y)) || S.buoys.some(b => b.x === c.x && b.y === c.y)) return flash('A buoy can’t go there. Pick open water.');
+    }
+    if (kind === 'charge' && S.charges <= 0) return flash('Nothing left to fire.');
+
+    S.turn++;
+    S.marks.forEach(m => m.age++);
+    S.marks = S.marks.filter(m => m.age <= MAX_AGE);
+
+    if (kind === 'ping') doPing(c);
+    else if (kind === 'buoy') {
+      const id = 'B' + (S.buoys.length + 1);
+      S.buoys.push({ x: c.x, y: c.y, id });
+      S.buoysLeft--;
+      log(`Sonobuoy ${id} in the water at ${gridName(c)}.`, 'phos');
+      tone(520, 0.25, 0.08);
+    } else if (kind === 'charge') {
+      if (doCharge(c)) { finish(); return; }
+      if (S.over) { finish(); return; }
+    } else {
+      log('Holding position. All buoys listening.', 'dim');
+    }
+
+    moveSub();
+    if (!S.over) listen();
+    if (S.alert > 0) S.alert--;
+    finish();
+  }
+  function finish() { updateUI(); render(); }
+
+  function contact() { S.contacts++; S.lastContact = S.turn; }
+
+  function doPing(c) {
+    S.pings++;
+    const sub = S.sub, T = S.T;
+    const d = Math.hypot(sub.x - c.x, sub.y - c.y);
+    anims.push({ k: 'ping', x: c.x, y: c.y, t0: performance.now() });
+    tone(1450, 1.1, 0.22);
+    if (d <= ACTIVE_R && rand() < T.activeP) {
+      const r = Math.round(d);
+      S.marks.push({ k: 'ret', x: c.x, y: c.y, r, age: 0 });
+      const echo = ['', 'very faint echo', 'small echo', 'solid echo', 'big, hard echo'][T.sizeN];
+      log(`Return from ${gridName(c)}: range ${r * NM} nmi, ${echo}.`, 'amber');
+      tone(1450, 0.6, 0.07, 0.15 + d * 0.08);
+      contact();
+    } else {
+      S.marks.push({ k: 'none', x: c.x, y: c.y, age: 0 });
+      log(`Ping from ${gridName(c)}: no return.`, 'dim');
+    }
+    if (S.pings === 1 && S.tid === 'october') log('Jonesy: She heard that, Captain. One ping is all it takes.', 'quote');
+    S.alert = 3; S.noise = { x: c.x, y: c.y };
+  }
+
+  function doCharge(c) {
+    S.charges--;
+    const sub = S.sub, oct = S.tid === 'october';
+    anims.push({ k: 'boom', x: c.x, y: c.y, t0: performance.now() });
+    if (oct) tone(880, 0.5, 0.12, 0, 'triangle'); else { tone(55, 1.2, 0.5, 0, 'sine'); tone(90, 0.6, 0.25, 0.05, 'triangle'); }
+    const dx = Math.abs(sub.x - c.x), dy = Math.abs(sub.y - c.y);
+    if (dx <= 1 && dy <= 1) { end('win'); return true; }
+    S.marks.push({ k: 'boom', x: c.x, y: c.y, age: 0 });
+    const near = Math.max(dx, dy) <= 2;
+    if (oct) log(near ? `Hail at ${gridName(c)}: no answer, but sonar hears something close.` : `Hail at ${gridName(c)}: no answer.`, 'red');
+    else log(near ? `Charge at ${gridName(c)}: near miss. Hull popping noises close by.` : `Charge at ${gridName(c)}: miss.`, 'red');
+    S.alert = 4; S.noise = { x: c.x, y: c.y };
+    if (S.charges === 0) end('lose', oct ? 'You ran out of hails. Red October went quiet and slipped away.' : 'You are out of depth charges. The sub will reach the escape line unopposed.');
+    return false;
+  }
+
+  function moveSub() {
+    const T = S.T, sub = S.sub;
+    if (S.ivan === 0 && S.turn > 2 && rand() < 0.07) { S.ivan = 2; S.ivanSaid = false; }
+    S.ivanNow = S.ivan > 0;
+    sub.spd = S.alert > 0 ? T.sprint : T.cruise;
+    sub.acc += sub.spd;
+    while (sub.acc >= 1 && !S.over) { sub.acc -= 1; step(); }
+    if (S.ivan > 0) S.ivan--;
+  }
+
+  function step() {
+    const sub = S.sub;
+    const tgt = S.ivanNow ? { x: sub.x + 6, y: sub.y } : { x: -1, y: sub.ty };
+    let best = null, bs = Infinity;
+    for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) {
+      if (!dx && !dy) continue;
+      const nx = sub.x + dx, ny = sub.y + dy;
+      if (ny < 0 || ny >= ROWS || nx >= COLS) continue;
+      if (nx < 0 && S.ivanNow) continue;
+      if (nx >= 0 && S.rocks.has(key(nx, ny))) continue;
+      let s = Math.hypot(nx - tgt.x, ny - tgt.y) + rand() * 1.3;
+      if (S.alert > 0 && S.noise) s -= 0.5 * Math.hypot(nx - S.noise.x, ny - S.noise.y);
+      if (s < bs) { bs = s; best = [nx, ny]; }
+    }
+    if (!best) return;
+    sub.x = best[0]; sub.y = best[1];
+    S.trail.push([sub.x, sub.y]);
+    if (sub.x < 0) end('lose');
+  }
+
+  function screws(spd) {
+    if (S.tid === 'october') return 'No screw noise. Just a low rumble.';
+    if (spd >= 1.2) return 'Fast, high-RPM screws.';
+    if (spd >= 0.9) return 'Steady screw beat.';
+    if (spd >= 0.5) return 'Slow screws.';
+    return 'Very quiet, slow screws.';
+  }
+
+  function listen() {
+    const sub = S.sub;
+    let L = S.T.noise * Math.pow(sub.spd, 1.5);
+    if (S.ivanNow) L *= 1.6;
+    S.buoys.forEach(b => {
+      const d = Math.hypot(sub.x - b.x, sub.y - b.y);
+      if (d <= PASSIVE_R) {
+        const p = Math.min(0.95, L * (1 - d / PASSIVE_R) * (jonesy ? 1.3 : 1) + (d < 1 ? 0.3 : 0));
+        if (rand() < p) {
+          const trueAng = Math.atan2(sub.x - b.x, -(sub.y - b.y));
+          const errDeg = (4 + 14 * (1 - p)) * (jonesy ? 0.5 : 1);
+          const ang = trueAng + gauss() * errDeg * Math.PI / 180;
+          S.marks.push({ k: 'brg', x: b.x, y: b.y, ang, err: errDeg * 1.6 * Math.PI / 180, age: 0 });
+          const strength = p > 0.6 ? 'strong' : p > 0.3 ? 'moderate' : 'weak';
+          log(`${b.id}: contact bearing ${deg(ang)}°, ${strength}. ${screws(sub.spd)}`, 'phos');
+          tone(300, 0.35, 0.06);
+          contact();
+          if (S.ivanNow && !S.ivanSaid) { S.ivanSaid = true; log('Jonesy: Conn, sonar! Crazy Ivan! Contact is turning hard to clear its baffles.', 'quote'); }
+          if (S.tid === 'october' && !S.octSaid) { S.octSaid = true; log('Jonesy: Computer calls it a seismic anomaly. Magma displacement. I don’t buy it. That’s man-made.', 'quote'); }
+        }
+      }
+      if (rand() < 0.035) {
+        const ang = rand() * Math.PI * 2;
+        S.marks.push({ k: 'brg', x: b.x, y: b.y, ang, err: 0.3, age: 0, bio: true });
+        log(`${b.id}: faint contact bearing ${deg(ang)}°. Jonesy: biologics. Probably whales.`, 'bio');
+      }
+    });
+  }
+
+  function end(result, reason) {
+    const T = S.T, oct = S.tid === 'october';
+    S.over = { result, reason };
+    const box = $('#overlayBox');
+    box.innerHTML = '';
+    const h = document.createElement('h3');
+    const p = document.createElement('p');
+    const lines = [];
+    if (result === 'win') {
+      h.className = 'win';
+      h.textContent = oct ? 'Contact established' : 'Target destroyed';
+      p.textContent = oct
+        ? `Captain Ramius answers your hail at ${gridName(S.sub)}. Red October is defecting, and you found her first. Welcome to the New World.`
+        : `${S.hidden ? 'The unknown contact was a ' + T.name + ' (' + T.cls.toLowerCase() + '). ' : T.name + ' '}sunk at ${gridName(S.sub)} on turn ${S.turn}.`;
+      if (S.pings === 1) lines.push(oct ? '“Re-verify our range to target. One ping only.” You found her with a single ping.' : 'One ping only: you won with a single active ping.');
+      if (S.pings === 0) lines.push('Silent hunter: you won without a single active ping.');
+      log(oct ? 'Hail answered. Red October is ours.' : `Target destroyed. It was a ${T.name}.`, 'red');
+      if (!oct && !unlocked) {
+        unlocked = true; store('subhunt.october', '1'); buildMissions(true);
+        lines.push('New classified mission unlocked: Red October.');
+        log('Classified mission unlocked: Red October.', 'quote');
+      }
+    } else {
+      h.className = 'lose';
+      h.textContent = oct ? 'She slipped away' : 'Contact lost';
+      p.textContent = reason || `${S.hidden ? 'The unknown contact, a ' + T.name + ',' : 'The ' + T.name} crossed the escape line on turn ${S.turn}.`;
+      log(oct ? 'Red October crossed the line. Ramius is gone.' : `The ${T.name} reached the escape line.`, 'red');
+    }
+    const meta = document.createElement('div'); meta.className = 'meta';
+    meta.textContent = `Turns ${S.turn} · Pings ${S.pings} · Buoys ${S.buoys.length} · Contacts ${S.contacts}`;
+    const btn = document.createElement('button'); btn.className = 'small'; btn.textContent = 'Hunt again'; btn.id = 'again';
+    btn.addEventListener('click', newGame);
+    box.append(h, p);
+    lines.forEach(l => { const a = document.createElement('p'); a.className = 'ach'; a.textContent = l; box.append(a); });
+    box.append(meta, btn);
+    $('#overlay').hidden = false;
+  }
+
+  // ---------- UI ----------
+  function pips(n, cls) { return `<span class="pips ${cls}">${[1, 2, 3, 4].map(i => `<i class="${i <= n ? 'on' : ''}"></i>`).join('')}</span>`; }
+  function updateUI() {
+    const T = S.T, hid = S.hidden && !S.over;
+    $('#d-name').textContent = hid ? 'Unknown contact' : T.name;
+    $('#d-cls').textContent = hid ? 'Class unknown' : T.cls;
+    $('#d-blurb').textContent = hid ? 'Listen to the screws and watch how strong the echoes are to work out what you are hunting.' : T.blurb;
+    $('#d-size').innerHTML = hid ? '???' : `${T.size}`;
+    $('#d-speed').innerHTML = hid ? '???' : `${T.speedLabel}`;
+    $('#d-active').innerHTML = hid ? '???' : `${pips(activeLvl(T), 'amber')} ${LVL[activeLvl(T)]}`;
+    $('#d-passive').innerHTML = hid ? '???' : `${pips(passiveLvl(T), 'phos')} ${LVL[passiveLvl(T)]}`;
+    $('#s-turn').textContent = S.turn;
+    $('#s-pings').textContent = S.pings;
+    $('#s-contacts').textContent = S.contacts;
+    $('#s-last').textContent = S.lastContact == null ? '–' : 'T' + S.lastContact;
+    $('#n-buoy').textContent = S.buoysLeft;
+    $('#n-charge').textContent = S.charges;
+    renderLog();
+  }
+  function setMode(m) {
+    mode = m;
+    ['ping', 'buoy', 'charge'].forEach(k => $('#m-' + k).setAttribute('aria-pressed', String(k === m)));
+    render();
+  }
+  function buildMissions(keep) {
+    const sel = $('#mission'), prev = sel.value;
+    sel.innerHTML = '';
+    MISSIONS.forEach(([id, label]) => {
+      const o = document.createElement('option'); o.value = id;
+      if (id === 'october' && !unlocked) { o.textContent = '██████ (classified)'; o.disabled = true; }
+      else o.textContent = label;
+      sel.append(o);
+    });
+    if (keep && prev) sel.value = prev;
+  }
+
+  // ---------- rendering ----------
+  const px = x => LM + x * cs, py = y => TM + y * cs;
+  const cxp = x => px(x + 0.5), cyp = y => py(y + 0.5);
+
+  function resize() {
+    const w = cv.clientWidth || 600;
+    cs = (w - LM - 2) / COLS;
+    const h = Math.round(TM + cs * ROWS + 2);
+    cv.style.height = h + 'px';
+    const dpr = window.devicePixelRatio || 1;
+    cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    render();
+  }
+
+  function render() {
+    if (!S) return;
+    const w = cv.clientWidth, h = parseFloat(cv.style.height) || 400;
+    const now = performance.now();
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = C.bg; ctx.fillRect(0, 0, w, h);
+
+    // sea
+    const g = ctx.createRadialGradient(px(COLS * 0.55), py(ROWS * 0.45), cs * 2, px(COLS * 0.55), py(ROWS * 0.45), cs * COLS * 0.7);
+    g.addColorStop(0, C.sea1); g.addColorStop(1, C.sea2);
+    ctx.fillStyle = g; ctx.fillRect(px(0), py(0), cs * COLS, cs * ROWS);
+
+    // grid
+    ctx.strokeStyle = C.grid; ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let x = 0; x <= COLS; x++) { ctx.moveTo(Math.round(px(x)) + .5, py(0)); ctx.lineTo(Math.round(px(x)) + .5, py(ROWS)); }
+    for (let y = 0; y <= ROWS; y++) { ctx.moveTo(px(0), Math.round(py(y)) + .5); ctx.lineTo(px(COLS), Math.round(py(y)) + .5); }
+    ctx.stroke();
+
+    // labels
+    ctx.fillStyle = C.muted; ctx.font = `500 ${Math.max(9, Math.min(11, cs * 0.45))}px ${getComputedStyle(document.body).getPropertyValue('--f-mono') || 'monospace'}`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    for (let x = 0; x < COLS; x++) ctx.fillText(String.fromCharCode(65 + x), cxp(x), TM / 2);
+    ctx.textAlign = 'right';
+    for (let y = 0; y < ROWS; y++) ctx.fillText(String(y + 1), LM - 5, cyp(y));
+
+    // escape line
+    ctx.save();
+    ctx.strokeStyle = rgba(C.red, 0.7); ctx.setLineDash([6, 5]); ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(px(0) + 1, py(0)); ctx.lineTo(px(0) + 1, py(ROWS)); ctx.stroke();
+    ctx.restore();
+    ctx.save();
+    ctx.translate(px(0) + cs * 0.38, py(ROWS / 2)); ctx.rotate(-Math.PI / 2);
+    ctx.fillStyle = rgba(C.red, 0.55); ctx.textAlign = 'center';
+    ctx.font = `600 ${Math.max(9, cs * 0.42)}px 'Chakra Petch', sans-serif`;
+    ctx.fillText('ESCAPE LINE', 0, 0);
+    ctx.restore();
+
+    // rocks
+    S.rocks.forEach(k => {
+      const [x, y] = k.split(',').map(Number);
+      ctx.fillStyle = C.rock; ctx.fillRect(px(x) + 1, py(y) + 1, cs - 1, cs - 1);
+    });
+    ctx.fillStyle = C.muted; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+    ctx.font = `600 ${Math.max(9, cs * 0.42)}px 'Chakra Petch', sans-serif`;
+    ctx.fillText("THOR'S TWINS", px(S.label.x), py(S.label.y) - 2);
+
+    // marks
+    S.marks.forEach(m => {
+      const fade = 1 - m.age / (MAX_AGE + 1);
+      const cx = cxp(m.x), cy = cyp(m.y);
+      if (m.k === 'ret') {
+        if (m.r === 0) { ctx.fillStyle = rgba(C.amber, 0.5 * fade); ctx.fillRect(px(m.x), py(m.y), cs, cs); }
+        else {
+          ctx.lineWidth = cs; ctx.strokeStyle = rgba(C.amber, 0.22 * fade);
+          ctx.beginPath(); ctx.arc(cx, cy, m.r * cs, 0, Math.PI * 2); ctx.stroke();
+          ctx.lineWidth = 1.5; ctx.strokeStyle = rgba(C.amber, 0.85 * fade);
+          ctx.beginPath(); ctx.arc(cx, cy, m.r * cs, 0, Math.PI * 2); ctx.stroke();
+        }
+        ctx.fillStyle = rgba(C.amber, fade); ctx.beginPath(); ctx.arc(cx, cy, 3, 0, Math.PI * 2); ctx.fill();
+      } else if (m.k === 'none') {
+        ctx.fillStyle = rgba(C.muted, 0.06 * fade);
+        ctx.beginPath(); ctx.arc(cx, cy, ACTIVE_R * cs, 0, Math.PI * 2); ctx.fill();
+        ctx.setLineDash([4, 5]); ctx.lineWidth = 1; ctx.strokeStyle = rgba(C.muted, 0.4 * fade);
+        ctx.stroke(); ctx.setLineDash([]);
+        ctx.fillStyle = rgba(C.muted, 0.8 * fade); ctx.beginPath(); ctx.arc(cx, cy, 2.5, 0, Math.PI * 2); ctx.fill();
+      } else if (m.k === 'brg') {
+        const col = m.bio ? C.bio : C.phos;
+        const a0 = m.ang - m.err - Math.PI / 2, a1 = m.ang + m.err - Math.PI / 2, R = PASSIVE_R * cs;
+        ctx.fillStyle = rgba(col, (m.bio ? 0.08 : 0.16) * fade);
+        ctx.beginPath(); ctx.moveTo(cx, cy); ctx.arc(cx, cy, R, a0, a1); ctx.closePath(); ctx.fill();
+        ctx.strokeStyle = rgba(col, (m.bio ? 0.4 : 0.8) * fade); ctx.lineWidth = 1.25;
+        if (m.bio) ctx.setLineDash([3, 4]);
+        ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + Math.cos(m.ang - Math.PI / 2) * R, cy + Math.sin(m.ang - Math.PI / 2) * R); ctx.stroke();
+        ctx.setLineDash([]);
+      } else if (m.k === 'boom') {
+        ctx.strokeStyle = rgba(C.red, 0.7 * fade); ctx.lineWidth = 1.5;
+        ctx.strokeRect(px(m.x - 1) + 1, py(m.y - 1) + 1, cs * 3 - 2, cs * 3 - 2);
+        const r = cs * 0.3;
+        ctx.beginPath(); ctx.moveTo(cx - r, cy - r); ctx.lineTo(cx + r, cy + r); ctx.moveTo(cx + r, cy - r); ctx.lineTo(cx - r, cy + r); ctx.stroke();
+      }
+    });
+
+    // buoys
+    S.buoys.forEach(b => {
+      const cx = cxp(b.x), cy = cyp(b.y);
+      ctx.setLineDash([2, 6]); ctx.strokeStyle = rgba(C.phos, 0.18); ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.arc(cx, cy, PASSIVE_R * cs, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+      ctx.fillStyle = C.bg; ctx.strokeStyle = C.phos; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(cx, cy, Math.max(4, cs * 0.26), 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = C.phos; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+      ctx.font = `500 ${Math.max(9, cs * 0.4)}px 'IBM Plex Mono', monospace`;
+      ctx.fillText(b.id, cx + cs * 0.3, cy + cs * 0.15);
+    });
+
+    // hover preview
+    if (hover && !S.over) {
+      const cx = cxp(hover.x), cy = cyp(hover.y);
+      ctx.setLineDash([5, 5]); ctx.lineWidth = 1.25;
+      if (mode === 'ping') { ctx.strokeStyle = rgba(C.amber, 0.6); ctx.beginPath(); ctx.arc(cx, cy, ACTIVE_R * cs, 0, Math.PI * 2); ctx.stroke(); }
+      if (mode === 'buoy') { ctx.strokeStyle = rgba(C.phos, 0.5); ctx.beginPath(); ctx.arc(cx, cy, PASSIVE_R * cs, 0, Math.PI * 2); ctx.stroke(); }
+      if (mode === 'charge') { ctx.strokeStyle = rgba(C.red, 0.8); ctx.strokeRect(px(hover.x - 1), py(hover.y - 1), cs * 3, cs * 3); }
+      ctx.setLineDash([]);
+      const col = mode === 'ping' ? C.amber : mode === 'buoy' ? C.phos : C.red;
+      ctx.strokeStyle = col; ctx.lineWidth = 1.5; ctx.strokeRect(px(hover.x) + 1, py(hover.y) + 1, cs - 2, cs - 2);
+    }
+
+    // animations
+    anims = anims.filter(a => now - a.t0 < 900);
+    if (!reduceMotion) anims.forEach(a => {
+      const t = (now - a.t0) / 900, cx = cxp(a.x), cy = cyp(a.y);
+      if (a.k === 'ping') {
+        ctx.strokeStyle = rgba(C.amber, 0.9 * (1 - t)); ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(cx, cy, ACTIVE_R * cs * t, 0, Math.PI * 2); ctx.stroke();
+      } else {
+        ctx.fillStyle = rgba(S.tid === 'october' ? C.phos : C.red, 0.45 * (1 - t));
+        ctx.beginPath(); ctx.arc(cx, cy, cs * (0.5 + 1.6 * t), 0, Math.PI * 2); ctx.fill();
+      }
+    });
+
+    // reveal at the end
+    if (S.over) {
+      ctx.strokeStyle = rgba(C.red, 0.8); ctx.lineWidth = 2; ctx.setLineDash([2, 5]);
+      ctx.beginPath();
+      S.trail.forEach(([x, y], i) => { const X = cxp(Math.max(x, 0)), Y = cyp(y); i ? ctx.lineTo(X, Y) : ctx.moveTo(X, Y); });
+      ctx.stroke(); ctx.setLineDash([]);
+      const X = cxp(Math.max(S.sub.x, 0)), Y = cyp(S.sub.y);
+      ctx.fillStyle = S.over.result === 'win' ? C.phos : C.red;
+      ctx.beginPath(); ctx.ellipse(X, Y, cs * 0.55, cs * 0.24, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillRect(X - cs * 0.08, Y - cs * 0.42, cs * 0.18, cs * 0.25);
+    }
+
+    if (anims.length && !reduceMotion) requestAnimationFrame(render);
+  }
+
+  function cellAt(e) {
+    const r = cv.getBoundingClientRect();
+    const x = Math.floor((e.clientX - r.left - LM) / cs), y = Math.floor((e.clientY - r.top - TM) / cs);
+    return x >= 0 && x < COLS && y >= 0 && y < ROWS ? { x, y } : null;
+  }
+
+  // ---------- events ----------
+  cv.addEventListener('pointermove', e => { const c = cellAt(e); if (!hover || !c || c.x !== hover.x || c.y !== hover.y) { hover = c; render(); } });
+  cv.addEventListener('pointerleave', () => { hover = null; render(); });
+  cv.addEventListener('click', e => { const c = cellAt(e); if (c) act(mode, c); });
+  $('#m-ping').addEventListener('click', () => setMode('ping'));
+  $('#m-buoy').addEventListener('click', () => setMode('buoy'));
+  $('#m-charge').addEventListener('click', () => setMode('charge'));
+  $('#wait').addEventListener('click', () => act('wait'));
+  $('#new').addEventListener('click', newGame);
+  $('#mission').addEventListener('change', newGame);
+  $('#mute').addEventListener('click', () => {
+    muted = !muted;
+    $('#mute').textContent = muted ? 'Sound off' : 'Sound on';
+    $('#mute').setAttribute('aria-pressed', String(muted));
+  });
+  document.addEventListener('keydown', e => {
+    const tag = (e.target && e.target.tagName) || '';
+    if (tag === 'SELECT' || tag === 'INPUT') return;
+    if (tag === 'BUTTON' && (e.key === ' ' || e.key === 'Enter')) return;
+    keybuf = (keybuf + (e.key || '').toLowerCase()).slice(-10);
+    if (keybuf.endsWith('ramius')) {
+      unlocked = true; store('subhunt.october', '1'); buildMissions();
+      $('#mission').value = 'october'; newGame();
+      flash('Classified mission unlocked: Red October.');
+      return;
+    }
+    if (keybuf.endsWith('jonesy')) {
+      jonesy = !jonesy;
+      log(jonesy ? 'Jonesy is on the headphones. Passive bearings are sharper.' : 'Jonesy went off watch.', 'quote');
+      updateUI(); return;
+    }
+    if (e.key === '1') setMode('ping');
+    else if (e.key === '2') setMode('buoy');
+    else if (e.key === '3') setMode('charge');
+    else if (e.key === 'w' || e.key === 'W' || e.key === ' ') { if (e.key === ' ') e.preventDefault(); act('wait'); }
+  });
+
+  readColors();
+  buildMissions();
+  $('#mission').value = 'leviathan';
+  newGame();
+  if (window.ResizeObserver) new ResizeObserver(resize).observe($('#mapbox')); else window.addEventListener('resize', resize);
+  resize();
+})();
+</script>
