@@ -67,6 +67,11 @@ canvas#map { display: block; border: 1px solid var(--line); border-radius: 6px; 
 .tool .n { font-family: var(--f-mono); font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .tool:disabled { opacity: .45; cursor: not-allowed; }
 .spacer { flex: 1; }
+.replay { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; }
+.replay input[type=range] { flex: 1; min-width: 120px; accent-color: var(--phos); }
+.rp-turn { font-family: var(--f-mono); font-size: 13px; font-variant-numeric: tabular-nums; color: var(--fg); }
+.rp-events { flex-basis: 100%; font-family: var(--f-mono); font-size: 12px; color: var(--muted); min-height: 3em; }
+.rp-label { font: 600 12px var(--f-display); letter-spacing: .12em; text-transform: uppercase; color: var(--phos); }
 .flash { min-height: 20px; font-family: var(--f-mono); font-size: 12px; color: var(--amber); }
 
 aside { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
@@ -134,12 +139,20 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
         <div class="overlay" id="overlay" hidden><div class="box" id="overlayBox"></div></div>
       </div>
       <div class="tools">
-        <button class="tool ping" id="m-ping" aria-pressed="true" title="Give me a ping, Vasili."><span class="k">1</span>Active ping</button>
-        <button class="tool buoy" id="m-buoy" aria-pressed="false"><span class="k">2</span>Drop buoy <span class="n" id="n-buoy">8</span></button>
+        <button class="tool ping" id="m-ping" aria-pressed="true" title="Give me a ping, Vasili."><span class="k">1</span>Active buoy <span class="n" id="n-ping">6</span></button>
+        <button class="tool buoy" id="m-buoy" aria-pressed="false"><span class="k">2</span>Passive buoy <span class="n" id="n-buoy">8</span></button>
         <button class="tool charge" id="m-charge" aria-pressed="false"><span class="k">3</span><span id="charge-label">Depth charge</span> <span class="n" id="n-charge">6</span></button>
         <span class="spacer"></span>
         <button class="tool" id="wait"><span class="k">W</span>Wait and listen</button>
         <button class="tool" id="mute" aria-pressed="false" title="Sound on or off">Sound on</button>
+      </div>
+      <div class="replay" id="replay" hidden>
+        <span class="rp-label">Replay</span>
+        <button class="small" id="rp-play">Pause</button>
+        <input type="range" id="rp-slider" min="0" max="1" step="1" value="0" aria-label="Replay turn">
+        <span class="rp-turn" id="rp-turn">T00</span>
+        <button class="small" id="rp-close">Close replay</button>
+        <div class="rp-events" id="rp-events" aria-live="polite"></div>
       </div>
       <div class="flash" id="flash" role="status" aria-live="polite"></div>
     </section>
@@ -188,13 +201,15 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
         <details class="help">
           <summary>How to play</summary>
           <ul>
-            <li><b>Active ping</b> (amber): click a square. If the sub is within 10 nmi (5 squares), you may get a return showing its range as a ring. Big subs echo reliably; small ones often don't. Pinging also warns the sub, so it speeds up and dodges.</li>
+            <li><b>Active buoys</b> (amber): drop one on a square and it pings every turn for 4 turns. If the sub is within 10 nmi (5 squares) of it, you may get a return showing its range as a ring. Big subs echo reliably; small ones often don't.</li>
+            <li><b>The sub hears pings much further away</b> than you can hear echoes: out to 24 nmi (12 squares, the faint outer ring when you aim). When it hears one it speeds up and steers to stay out of that buoy's range, so drop them where it has to go, not where it is.</li>
             <li><b>No return</b> doesn't prove the sub isn't there. A small sub can sit inside the circle and still not echo.</li>
             <li><b>Sonobuoys</b> (teal) listen silently every turn up to 16 nmi away and report a bearing, not a range. Fast subs are loud; slow ones are hard to hear.</li>
             <li><b>Depth charges</b> (red) hit a 3×3 area where the sub is now, before it moves. You can't drop one on top of a friendly ship.</li>
             <li><b>The convoy</b> (white hulls) sails east along the dashed route. The sub will close to within 8 nmi and fire torpedoes. A launch is loud: the targeted ship reports a red bearing and you can see the torpedo run, so you get one turn to answer. A sub that has just been pinged or charged is more cautious about firing.</li>
             <li>You lose if every ship is sunk, if you run out of charges, or if the sub reaches the escape line on the west edge.</li>
             <li>Every action takes one turn. After each turn the sub moves.</li>
+            <li>When the hunt ends you can watch a replay of the sub's course, your buoys and every contact, turn by turn.</li>
           </ul>
         </details>
       </div>
@@ -205,7 +220,7 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
 <script>
 (() => {
   const COLS = 40, ROWS = 26, ACTIVE_R = 5, PASSIVE_R = 8, NM = 2, MAX_AGE = 6;
-  const BUOYS = 8, CHARGES = 6, ATTACK_R = 4, TORP_SPD = 3, TORP_HIT = 0.7, CONVOY_SPD = 0.8, MOVE_SCALE = 1.5, CONVOY_N = 4, MIN_CS = 15;
+  const BUOYS = 8, ACTIVE_BUOYS = 6, ACTIVE_LIFE = 4, COUNTER_R = 12, CHARGES = 6, ATTACK_R = 4, TORP_SPD = 3, TORP_HIT = 0.7, CONVOY_SPD = 0.8, MOVE_SCALE = 1.5, CONVOY_N = 4, MIN_CS = 15;
   const SHIP_NAMES = ['MV Aurora', 'MV Kestrel', 'SS Halcyon', 'MV Northern Star', 'MV Saltire', 'SS Meridian', 'MV Bluebell', 'MV Cormorant'];
   const LM = 24, TM = 18;
 
@@ -241,7 +256,7 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
 
   function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { return null; } }
   let unlocked = store('subhunt.october') === '1';
-  let jonesy = false, muted = false, mode = 'ping', hover = null, cs = 20, S = null, anims = [], keybuf = '';
+  let jonesy = false, muted = false, mode = 'ping', hover = null, cs = 20, S = null, anims = [], keybuf = '', RP = null;
 
   const rand = Math.random;
   const gauss = () => { let u = 0, v = 0; while (!u) u = rand(); while (!v) v = rand(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); };
@@ -319,8 +334,9 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
       T, tid, hidden, rocks, label, lane, ships, torps: [], subTorps: T.torps, cool: 0, atk: null, fired: false,
       sub: { x: sx, y: sy, ty: 2 + Math.floor(rand() * (ROWS - 4)), acc: 0, spd: T.cruise },
       trail: [[sx, sy]], alert: 0, noise: null, ivan: 0, ivanNow: false, ivanSaid: false, octSaid: false,
-      turn: 0, pings: 0, buoys: [], buoysLeft: BUOYS, charges: CHARGES, marks: [], log: [], over: null, contacts: 0, lastContact: null
+      turn: 0, pings: 0, actives: 0, activeLeft: ACTIVE_BUOYS, heard: [], buoys: [], buoysLeft: BUOYS, charges: CHARGES, marks: [], allMarks: [], hist: [], log: [], over: null, contacts: 0, lastContact: null
     };
+    stopReplay();
     $('#overlay').hidden = true;
     $('#charge-label').textContent = tid === 'october' ? 'Hail' : 'Depth charge';
     if (tid === 'october') {
@@ -333,13 +349,14 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
     }
     if (ships.length) log(`Convoy of ${ships.length} ships sailing east along row ${lane + 1}. The sub will go after them. Keep them afloat.`, 'dim');
     setMode('ping');
+    snapshot();
     updateUI(); render();
   }
 
   // ---------- log ----------
   function log(text, kind = '') {
     S.log.unshift({ t: S.turn, text, kind });
-    if (S.log.length > 80) S.log.pop();
+    if (S.log.length > 600) S.log.pop();
   }
   function renderLog() {
     const ul = $('#log');
@@ -360,8 +377,9 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
   // ---------- turn ----------
   function act(kind, c) {
     if (!S || S.over) return;
-    if (kind === 'buoy') {
-      if (S.buoysLeft <= 0) return flash('No sonobuoys left.');
+    if (kind === 'ping' && S.activeLeft <= 0) return flash('No active buoys left.');
+    if (kind === 'buoy' && S.buoysLeft <= 0) return flash('No passive buoys left.');
+    if (kind === 'buoy' || kind === 'ping') {
       if (S.rocks.has(key(c.x, c.y)) || S.buoys.some(b => b.x === c.x && b.y === c.y)) return flash('A buoy can’t go there. Pick open water.');
     }
     if (kind === 'charge' && S.charges <= 0) return flash('Nothing left to fire.');
@@ -372,10 +390,10 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
     S.marks.forEach(m => m.age++);
     S.marks = S.marks.filter(m => m.age <= MAX_AGE);
 
-    if (kind === 'ping') doPing(c);
+    if (kind === 'ping') dropActive(c);
     else if (kind === 'buoy') {
-      const id = 'B' + (S.buoys.length + 1);
-      S.buoys.push({ x: c.x, y: c.y, id });
+      const id = 'B' + (S.buoys.filter(b => b.kind === 'passive').length + 1);
+      S.buoys.push({ x: c.x, y: c.y, id, kind: 'passive', born: S.turn });
       S.buoysLeft--;
       log(`Sonobuoy ${id} in the water at ${gridName(c)}.`, 'phos');
       tone(520, 0.25, 0.08);
@@ -389,33 +407,62 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
     moveConvoy();
     moveSub();
     if (!S.over) runTorps();
-    if (!S.over) listen();
+    if (!S.over) { listen(); pingAll(); }
     if (S.alert > 0) S.alert--;
     finish();
   }
-  function finish() { updateUI(); render(); }
+  function finish() { snapshot(); updateUI(); render(); }
+
+  function addMark(m) { m.born = S.turn; m.age = 0; S.marks.push(m); S.allMarks.push(m); }
+  function snapshot() {
+    S.hist[S.turn] = {
+      sub: [S.sub.x, S.sub.y],
+      ships: S.ships.map(s => ({ name: s.name, x: s.x, y: s.y, st: s.st })),
+      torps: S.torps.map(t => ({ x: t.x, y: t.y, trail: t.trail.slice() }))
+    };
+  }
+  const activeLast = b => b.born + ACTIVE_LIFE - 1;
+  const pinging = (b, t) => b.kind === 'active' && t >= b.born && t <= activeLast(b);
 
   function contact() { S.contacts++; S.lastContact = S.turn; }
 
-  function doPing(c) {
-    S.pings++;
-    const sub = S.sub, T = S.T;
-    const d = Math.hypot(sub.x - c.x, sub.y - c.y);
-    anims.push({ k: 'ping', x: c.x, y: c.y, t0: performance.now() });
+  function dropActive(c) {
+    S.actives++; S.activeLeft--;
+    const id = 'A' + S.actives;
+    S.buoys.push({ x: c.x, y: c.y, id, kind: 'active', born: S.turn });
+    log(`Active buoy ${id} in the water at ${gridName(c)}. Pinging for ${ACTIVE_LIFE} turns.`, 'amber');
+    if (S.actives === 1 && S.tid === 'october') log('Jonesy: Every ping carries a long way, Captain. She will hear it well before we hear her.', 'quote');
+  }
+
+  // every live active buoy pings at the end of the turn, after the sub has moved
+  function pingAll() {
+    S.heard = [];
+    const live = S.buoys.filter(b => pinging(b, S.turn));
+    if (!live.length) return;
+    const sub = S.sub, T = S.T, quiet = [];
     tone(1450, 1.1, 0.22);
-    if (d <= ACTIVE_R && rand() < T.activeP) {
-      const r = Math.round(d);
-      S.marks.push({ k: 'ret', x: c.x, y: c.y, r, age: 0 });
-      const echo = ['', 'very faint echo', 'small echo', 'solid echo', 'big, hard echo'][T.sizeN];
-      log(`Return from ${gridName(c)}: range ${r * NM} nmi, ${echo}.`, 'amber');
-      tone(1450, 0.6, 0.07, 0.15 + d * 0.08);
-      contact();
-    } else {
-      S.marks.push({ k: 'none', x: c.x, y: c.y, age: 0 });
-      log(`Ping from ${gridName(c)}: no return.`, 'dim');
+    live.forEach(b => {
+      S.pings++;
+      const d = Math.hypot(sub.x - b.x, sub.y - b.y);
+      anims.push({ k: 'ping', x: b.x, y: b.y, t0: performance.now() });
+      if (d <= ACTIVE_R && rand() < T.activeP) {
+        const r = Math.round(d);
+        addMark({ k: 'ret', x: b.x, y: b.y, r });
+        const echo = ['', 'very faint echo', 'small echo', 'solid echo', 'big, hard echo'][T.sizeN];
+        log(`${b.id}: return at range ${r * NM} nmi, ${echo}.`, 'amber');
+        tone(1450, 0.6, 0.07, 0.15 + d * 0.08);
+        contact();
+      } else quiet.push(b.id);
+      if (d <= COUNTER_R) S.heard.push({ x: b.x + gauss() * 1.5, y: b.y + gauss() * 1.5, d }); // the sub's fix on the buoy is rough
+      if (S.turn === activeLast(b)) log(`${b.id} has used its last ping and gone quiet.`, 'dim');
+    });
+    if (quiet.length) log(`${quiet.join(', ')}: pinging, no return.`, 'dim');
+    if (S.heard.length) {
+      // the sub counter-detects the pings and runs from the closest one
+      S.alert = Math.max(S.alert, 3);
+      const n = S.heard.reduce((a, h) => h.d < a.d ? h : a);
+      S.noise = { x: n.x, y: n.y };
     }
-    if (S.pings === 1 && S.tid === 'october') log('Jonesy: She heard that, Captain. One ping is all it takes.', 'quote');
-    S.alert = 3; S.noise = { x: c.x, y: c.y };
   }
 
   function doCharge(c) {
@@ -425,7 +472,7 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
     if (oct) tone(880, 0.5, 0.12, 0, 'triangle'); else { tone(55, 1.2, 0.5, 0, 'sine'); tone(90, 0.6, 0.25, 0.05, 'triangle'); }
     const dx = Math.abs(sub.x - c.x), dy = Math.abs(sub.y - c.y);
     if (dx <= 1 && dy <= 1) { end('win'); return true; }
-    S.marks.push({ k: 'boom', x: c.x, y: c.y, age: 0 });
+    addMark({ k: 'boom', x: c.x, y: c.y });
     const near = Math.max(dx, dy) <= 2;
     if (oct) log(near ? `Hail at ${gridName(c)}: no answer, but sonar hears something close.` : `Hail at ${gridName(c)}: no answer.`, 'red');
     else log(near ? `Charge at ${gridName(c)}: near miss. Hull popping noises close by.` : `Charge at ${gridName(c)}: miss.`, 'red');
@@ -475,7 +522,7 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
     S.torps.push(t);
     const trueAng = Math.atan2(sub.x - ship.x, -(sub.y - ship.y));
     const ang = trueAng + gauss() * 6 * Math.PI / 180;
-    S.marks.push({ k: 'brg', x: ship.x, y: ship.y, ang, err: 8 * Math.PI / 180, age: 0, torp: true });
+    addMark({ k: 'brg', x: ship.x, y: ship.y, ang, err: 8 * Math.PI / 180, torp: true });
     log(`${ship.name}: Torpedo in the water! Launch transient bearing ${deg(ang)}°.`, 'red');
     tone(760, 0.14, 0.12, 0, 'square'); tone(760, 0.14, 0.12, 0.22, 'square');
     contact();
@@ -508,7 +555,9 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
   function step() {
     const sub = S.sub;
     const atk = !S.ivanNow && S.atk;
-    if (atk && Math.hypot(atk.x - sub.x, atk.y - sub.y) <= 2.5) return; // in firing position: hold and stay quiet
+    const AVOID = ACTIVE_R + 1.5;
+    const exposed = S.heard.some(h => Math.hypot(sub.x - h.x, sub.y - h.y) < AVOID);
+    if (atk && !exposed && Math.hypot(atk.x - sub.x, atk.y - sub.y) <= 2.5) return; // in firing position: hold and stay quiet
     const tgt = S.ivanNow ? { x: sub.x + 6, y: sub.y } : atk ? { x: atk.x + 2, y: atk.y } : { x: -1, y: sub.ty };
     let best = null, bs = Infinity;
     for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) {
@@ -519,6 +568,7 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
       if (nx >= 0 && S.rocks.has(key(nx, ny))) continue;
       let s = Math.hypot(nx - tgt.x, ny - tgt.y) + rand() * 1.3;
       if (S.alert > 0 && S.noise) s -= 0.5 * Math.hypot(nx - S.noise.x, ny - S.noise.y);
+      S.heard.forEach(h => { const d = Math.hypot(nx - h.x, ny - h.y); if (d < AVOID) s += (AVOID - d) * 1.5; });
       if (s < bs) { bs = s; best = [nx, ny]; }
     }
     if (!best) return;
@@ -542,6 +592,7 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
     if (S.fired) L += 0.5;
     S.fired = false;
     S.buoys.forEach(b => {
+      if (b.kind !== 'passive') return;
       const d = Math.hypot(sub.x - b.x, sub.y - b.y);
       if (d <= PASSIVE_R) {
         const p = Math.min(0.95, L * (1 - d / PASSIVE_R) * (jonesy ? 1.3 : 1) + (d < 1 ? 0.3 : 0));
@@ -549,7 +600,7 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
           const trueAng = Math.atan2(sub.x - b.x, -(sub.y - b.y));
           const errDeg = (4 + 14 * (1 - p)) * (jonesy ? 0.5 : 1);
           const ang = trueAng + gauss() * errDeg * Math.PI / 180;
-          S.marks.push({ k: 'brg', x: b.x, y: b.y, ang, err: errDeg * 1.6 * Math.PI / 180, age: 0 });
+          addMark({ k: 'brg', x: b.x, y: b.y, ang, err: errDeg * 1.6 * Math.PI / 180 });
           const strength = p > 0.6 ? 'strong' : p > 0.3 ? 'moderate' : 'weak';
           log(`${b.id}: contact bearing ${deg(ang)}°, ${strength}. ${screws(sub.spd)}`, 'phos');
           tone(300, 0.35, 0.06);
@@ -560,7 +611,7 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
       }
       if (rand() < 0.035) {
         const ang = rand() * Math.PI * 2;
-        S.marks.push({ k: 'brg', x: b.x, y: b.y, ang, err: 0.3, age: 0, bio: true });
+        addMark({ k: 'brg', x: b.x, y: b.y, ang, err: 0.3, bio: true });
         log(`${b.id}: faint contact bearing ${deg(ang)}°. Jonesy: biologics. Probably whales.`, 'bio');
       }
     });
@@ -581,8 +632,8 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
       p.textContent = oct
         ? `Captain Ramius answers your hail at ${gridName(S.sub)}. Red October is defecting, and you found her first. Welcome to the New World.`
         : `${S.hidden ? 'The unknown contact was a ' + T.name + ' (' + T.cls.toLowerCase() + '). ' : T.name + ' '}sunk at ${gridName(S.sub)} on turn ${S.turn}.`;
-      if (S.pings === 1) lines.push(oct ? '“Re-verify our range to target. One ping only.” You found her with a single ping.' : 'One ping only: you won with a single active ping.');
-      if (S.pings === 0) lines.push('Silent hunter: you won without a single active ping.');
+      if (S.actives === 1) lines.push(oct ? '“Re-verify our range to target. One ping only.” You found her with a single active buoy.' : 'One ping only: you won with a single active buoy.');
+      if (S.actives === 0) lines.push('Silent hunter: you won without a single active buoy.');
       if (nShips && safe === nShips) lines.push('Convoy intact: not a single ship lost.');
       log(oct ? 'Hail answered. Red October is ours.' : `Target destroyed. It was a ${T.name}.`, 'red');
       if (!oct && !unlocked) {
@@ -597,12 +648,15 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
       if (why !== 'convoy') log(oct ? 'Red October crossed the line. Ramius is gone.' : `The ${T.name} reached the escape line.`, 'red');
     }
     const meta = document.createElement('div'); meta.className = 'meta';
-    meta.textContent = `Turns ${S.turn} · Pings ${S.pings} · Buoys ${S.buoys.length} · Contacts ${S.contacts}${nShips ? ` · Ships saved ${safe}/${nShips}` : ''}`;
+    meta.textContent = `Turns ${S.turn} · Pings ${S.pings} · Buoys ${S.buoys.length - S.actives}P/${S.actives}A · Contacts ${S.contacts}${nShips ? ` · Ships saved ${safe}/${nShips}` : ''}`;
     const btn = document.createElement('button'); btn.className = 'small'; btn.textContent = 'Hunt again'; btn.id = 'again';
     btn.addEventListener('click', newGame);
+    const rb = document.createElement('button'); rb.className = 'small'; rb.textContent = 'Watch replay'; rb.id = 'watch';
+    rb.addEventListener('click', startReplay);
+    const row = document.createElement('div'); row.className = 'row'; row.append(btn, rb);
     box.append(h, p);
     lines.forEach(l => { const a = document.createElement('p'); a.className = 'ach'; a.textContent = l; box.append(a); });
-    box.append(meta, btn);
+    box.append(meta, row);
     $('#overlay').hidden = false;
   }
 
@@ -623,6 +677,7 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
     $('#s-convoy').textContent = S.ships.length ? S.ships.filter(s => s.st !== 'sunk').length + '/' + S.ships.length : '–';
     $('#s-last').textContent = S.lastContact == null ? '–' : 'T' + S.lastContact;
     $('#n-buoy').textContent = S.buoysLeft;
+    $('#n-ping').textContent = S.activeLeft;
     $('#n-charge').textContent = S.charges;
     renderLog();
   }
@@ -658,7 +713,49 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
     render();
   }
 
+  // ---------- replay ----------
+  function replayView(t) {
+    const h = S.hist[t] || S.hist[S.hist.length - 1];
+    return Object.assign({}, S, {
+      turn: t, replaying: t < S.turn, sub: { x: h.sub[0], y: h.sub[1] }, ships: h.ships, torps: h.torps,
+      buoys: S.buoys.filter(b => b.born <= t),
+      marks: S.allMarks.filter(m => m.born <= t && t - m.born <= MAX_AGE).map(m => Object.assign({}, m, { age: t - m.born })),
+      trail: S.hist.slice(0, t + 1).filter(Boolean).map(x => x.sub)
+    });
+  }
+  const view = () => RP ? replayView(RP.t) : S;
+  function setReplayTurn(t) {
+    RP.t = t;
+    $('#rp-slider').value = t;
+    $('#rp-turn').textContent = `T${String(t).padStart(2, '0')} / T${String(S.turn).padStart(2, '0')}`;
+    $('#rp-events').textContent = S.log.filter(e => e.t === t && !e.text.startsWith('Holding position')).reverse().map(e => e.text).join('  ·  ') || 'No contacts.';
+    S.buoys.forEach(b => { if (pinging(b, t)) anims.push({ k: 'ping', x: b.x, y: b.y, t0: performance.now() }); });
+    S.allMarks.forEach(m => { if (m.k === 'boom' && m.born === t) anims.push({ k: 'boom', x: m.x, y: m.y, t0: performance.now() }); });
+    render();
+  }
+  function playReplay() {
+    clearInterval(RP.timer);
+    if (RP.t >= S.turn) setReplayTurn(0);
+    RP.playing = true; $('#rp-play').textContent = 'Pause';
+    RP.timer = setInterval(() => { if (RP.t >= S.turn) pauseReplay(); else setReplayTurn(RP.t + 1); }, reduceMotion ? 900 : 450);
+  }
+  function pauseReplay() { clearInterval(RP.timer); RP.playing = false; $('#rp-play').textContent = 'Play'; }
+  function startReplay() {
+    if (!S || !S.over) return;
+    $('#overlay').hidden = true; $('.tools').hidden = true; $('#replay').hidden = false;
+    RP = { t: 0, playing: false, timer: null };
+    $('#rp-slider').max = S.turn;
+    setReplayTurn(0); playReplay();
+  }
+  function stopReplay() {
+    if (!RP) return;
+    clearInterval(RP.timer); RP = null;
+    $('#replay').hidden = true; $('.tools').hidden = false;
+  }
+  function closeReplay() { stopReplay(); $('#overlay').hidden = false; render(); }
+
   function render() {
+    const S = view();
     if (!S) return;
     const w = cv.clientWidth, h = parseFloat(cv.style.height) || 400;
     const now = performance.now();
@@ -733,12 +830,6 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
           ctx.beginPath(); ctx.arc(cx, cy, m.r * cs, 0, Math.PI * 2); ctx.stroke();
         }
         ctx.fillStyle = rgba(C.amber, fade); ctx.beginPath(); ctx.arc(cx, cy, 3, 0, Math.PI * 2); ctx.fill();
-      } else if (m.k === 'none') {
-        ctx.fillStyle = rgba(C.muted, 0.06 * fade);
-        ctx.beginPath(); ctx.arc(cx, cy, ACTIVE_R * cs, 0, Math.PI * 2); ctx.fill();
-        ctx.setLineDash([4, 5]); ctx.lineWidth = 1; ctx.strokeStyle = rgba(C.muted, 0.4 * fade);
-        ctx.stroke(); ctx.setLineDash([]);
-        ctx.fillStyle = rgba(C.muted, 0.8 * fade); ctx.beginPath(); ctx.arc(cx, cy, 2.5, 0, Math.PI * 2); ctx.fill();
       } else if (m.k === 'brg') {
         const col = m.bio ? C.bio : m.torp ? C.red : C.phos;
         const a0 = m.ang - m.err - Math.PI / 2, a1 = m.ang + m.err - Math.PI / 2, R = PASSIVE_R * cs;
@@ -759,6 +850,19 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
     // buoys
     S.buoys.forEach(b => {
       const cx = cxp(b.x), cy = cyp(b.y);
+      if (b.kind === 'active') {
+        const on = S.turn <= activeLast(b), col = on ? C.amber : C.muted, rr = Math.max(4, cs * 0.28);
+        if (on) {
+          ctx.setLineDash([4, 5]); ctx.strokeStyle = rgba(C.amber, 0.4); ctx.lineWidth = 1;
+          ctx.beginPath(); ctx.arc(cx, cy, ACTIVE_R * cs, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+        }
+        ctx.fillStyle = C.bg; ctx.strokeStyle = col; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(cx, cy - rr); ctx.lineTo(cx + rr, cy); ctx.lineTo(cx, cy + rr); ctx.lineTo(cx - rr, cy); ctx.closePath(); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = col; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+        ctx.font = `500 ${Math.max(9, cs * 0.4)}px 'IBM Plex Mono', monospace`;
+        ctx.fillText(on ? `${b.id}·${activeLast(b) - S.turn}` : b.id, cx + cs * 0.3, cy + cs * 0.15);
+        return;
+      }
       ctx.setLineDash([2, 6]); ctx.strokeStyle = rgba(C.phos, 0.18); ctx.lineWidth = 1;
       ctx.beginPath(); ctx.arc(cx, cy, PASSIVE_R * cs, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
       ctx.fillStyle = C.bg; ctx.strokeStyle = C.phos; ctx.lineWidth = 2;
@@ -801,7 +905,10 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
     if (hover && !S.over) {
       const cx = cxp(hover.x), cy = cyp(hover.y);
       ctx.setLineDash([5, 5]); ctx.lineWidth = 1.25;
-      if (mode === 'ping') { ctx.strokeStyle = rgba(C.amber, 0.6); ctx.beginPath(); ctx.arc(cx, cy, ACTIVE_R * cs, 0, Math.PI * 2); ctx.stroke(); }
+      if (mode === 'ping') {
+        ctx.strokeStyle = rgba(C.amber, 0.6); ctx.beginPath(); ctx.arc(cx, cy, ACTIVE_R * cs, 0, Math.PI * 2); ctx.stroke();
+        ctx.setLineDash([2, 7]); ctx.strokeStyle = rgba(C.amber, 0.22); ctx.beginPath(); ctx.arc(cx, cy, COUNTER_R * cs, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([5, 5]);
+      }
       if (mode === 'buoy') { ctx.strokeStyle = rgba(C.phos, 0.5); ctx.beginPath(); ctx.arc(cx, cy, PASSIVE_R * cs, 0, Math.PI * 2); ctx.stroke(); }
       if (mode === 'charge') { ctx.strokeStyle = rgba(C.red, 0.8); ctx.strokeRect(px(hover.x - 1), py(hover.y - 1), cs * 3, cs * 3); }
       ctx.setLineDash([]);
@@ -829,7 +936,7 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
       S.trail.forEach(([x, y], i) => { const X = cxp(Math.max(x, 0)), Y = cyp(y); i ? ctx.lineTo(X, Y) : ctx.moveTo(X, Y); });
       ctx.stroke(); ctx.setLineDash([]);
       const X = cxp(Math.max(S.sub.x, 0)), Y = cyp(S.sub.y);
-      ctx.fillStyle = S.over.result === 'win' ? C.phos : C.red;
+      ctx.fillStyle = S.replaying ? C.red : S.over.result === 'win' ? C.phos : C.red;
       ctx.beginPath(); ctx.ellipse(X, Y, cs * 0.55, cs * 0.24, 0, 0, Math.PI * 2); ctx.fill();
       ctx.fillRect(X - cs * 0.08, Y - cs * 0.42, cs * 0.18, cs * 0.25);
     }
@@ -853,6 +960,9 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
   $('#m-charge').addEventListener('click', () => setMode('charge'));
   $('#wait').addEventListener('click', () => act('wait'));
   $('#new').addEventListener('click', newGame);
+  $('#rp-play').addEventListener('click', () => RP && (RP.playing ? pauseReplay() : playReplay()));
+  $('#rp-close').addEventListener('click', closeReplay);
+  $('#rp-slider').addEventListener('input', e => { if (!RP) return; pauseReplay(); setReplayTurn(+e.target.value); });
   $('#mission').addEventListener('change', newGame);
   $('#mute').addEventListener('click', () => {
     muted = !muted;
