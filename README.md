@@ -9,6 +9,9 @@ Open `index.html` in a browser to play. No build step.
 - **Counter-detection**: the sub hears pings out to 24 nmi, much further than you can hear its echo. When it does, it sprints and steers to stay out of that buoy's range, so lay active buoys where it has to go.
 - **Passive buoys** (8): silent, report a bearing up to 16 nmi. Fast subs are loud; slow subs are quiet.
 
+## Sonar waterfall
+The waterfall shows what one passive buoy hears: bearing across, time going down, newest at the top. Pick the buoy from the tabs. Convoy ships, torpedoes and whales all leave traces, and white ticks mark the friendly bearings. The sub's trace appears even when it is too faint for a logged contact, so a weak line holding a steady bearing is worth acting on. Hover to read a bearing, and click to plot it on the map.
+
 ## Replay
 When a hunt ends, **Watch replay** plays it back turn by turn: the sub's course, every buoy drop, ping return, bearing, torpedo and depth charge, with that turn's events underneath. Scrub with the slider or pause.
 

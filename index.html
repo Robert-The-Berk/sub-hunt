@@ -98,6 +98,14 @@ select { flex: 1; min-width: 0; font: 500 14px var(--f-body); color: var(--fg); 
 .status b { font-family: var(--f-mono); font-size: 18px; font-weight: 500; font-variant-numeric: tabular-nums; }
 .status span { font-size: 10px; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
 
+.wf-tabs { display: flex; flex-wrap: wrap; gap: 4px; }
+.wf-tab { font: 500 12px var(--f-mono); padding: 3px 8px; border-radius: 4px; border: 1px solid var(--line); background: var(--sea2); color: var(--muted); cursor: pointer; }
+.wf-tab[aria-pressed="true"] { color: var(--phos); border-color: var(--phos); }
+.wf-tab:focus-visible { outline: 2px solid var(--phos); outline-offset: 1px; }
+.wf-wrap { position: relative; }
+canvas#wf { display: block; width: 100%; height: 196px; border: 1px solid var(--line); border-radius: 4px; background: var(--sea2); cursor: crosshair; touch-action: manipulation; }
+.wf-hint { font-size: 12px; color: var(--muted); margin: 0; }
+.wf-read { font-family: var(--f-mono); font-size: 11px; color: var(--muted); min-height: 1.4em; }
 .log { list-style: none; margin: 0; padding: 0; max-height: 300px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
 .log li { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 6px; }
 .log .t { font-family: var(--f-mono); font-size: 11px; color: var(--muted); padding-top: 2px; }
@@ -193,6 +201,13 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
       </div>
 
       <div class="card">
+        <h2>Sonar waterfall</h2>
+        <div class="wf-tabs" id="wf-tabs" role="group" aria-label="Choose a passive buoy"></div>
+        <div class="wf-wrap"><canvas id="wf" aria-label="Sonar waterfall: bearing across, time going down, newest at the top. Click a trace to plot that bearing on the map."></canvas></div>
+        <div class="wf-read" id="wf-read">Bearing across, newest at the top. Click a trace to plot it.</div>
+      </div>
+
+      <div class="card">
         <h2>Sonar log</h2>
         <ul class="log" id="log"></ul>
       </div>
@@ -205,6 +220,7 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
             <li><b>The sub hears pings much further away</b> than you can hear echoes: out to 24 nmi (12 squares, the faint outer ring when you aim). When it hears one it speeds up and steers to stay out of that buoy's range, so drop them where it has to go, not where it is.</li>
             <li><b>No return</b> doesn't prove the sub isn't there. A small sub can sit inside the circle and still not echo.</li>
             <li><b>Sonobuoys</b> (teal) listen silently every turn up to 16 nmi away and report a bearing, not a range. Fast subs are loud; slow ones are hard to hear.</li>
+            <li><b>Sonar waterfall</b>: shows what one passive buoy hears, bearing across and time going down. A steady line is something making noise. It shows the sub even when it is too faint for a logged contact, so look for a weak line that keeps the same bearing turn after turn. Small marks at the top show where the friendly ships are. Click a line to plot that bearing on the map.</li>
             <li><b>Depth charges</b> (red) hit a 3×3 area where the sub is now, before it moves. You can't drop one on top of a friendly ship.</li>
             <li><b>The convoy</b> (white hulls) sails east along the dashed route. The sub will close to within 8 nmi and fire torpedoes. A launch is loud: the targeted ship reports a red bearing and you can see the torpedo run, so you get one turn to answer. A sub that has just been pinged or charged is more cautious about firing.</li>
             <li>You lose if every ship is sunk, if you run out of charges, or if the sub reaches the escape line on the west edge.</li>
@@ -223,6 +239,7 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
   const BUOYS = 8, ACTIVE_BUOYS = 6, ACTIVE_LIFE = 4, COUNTER_R = 12, CHARGES = 6, ATTACK_R = 4, TORP_SPD = 3, TORP_HIT = 0.7, CONVOY_SPD = 0.8, MOVE_SCALE = 1.5, CONVOY_N = 4, MIN_CS = 15;
   const SHIP_NAMES = ['MV Aurora', 'MV Kestrel', 'SS Halcyon', 'MV Northern Star', 'MV Saltire', 'SS Meridian', 'MV Bluebell', 'MV Cormorant'];
   const LM = 24, TM = 18;
+  const WF_BINS = 90, WF_LINES = 4, WF_KEEP = 200, WF_SHIP_R = 14;
 
   const TYPES = {
     leviathan: { name: 'Leviathan', cls: 'Ballistic missile submarine', size: 'Huge', sizeN: 4, speedLabel: 'Medium',
@@ -256,6 +273,7 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
 
   function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { return null; } }
   let unlocked = store('subhunt.october') === '1';
+  let wfSel = null, wfHover = null;
   let jonesy = false, muted = false, mode = 'ping', hover = null, cs = 20, S = null, anims = [], keybuf = '', RP = null;
 
   const rand = Math.random;
@@ -337,6 +355,7 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
       turn: 0, pings: 0, actives: 0, activeLeft: ACTIVE_BUOYS, heard: [], buoys: [], buoysLeft: BUOYS, charges: CHARGES, marks: [], allMarks: [], hist: [], log: [], over: null, contacts: 0, lastContact: null
     };
     stopReplay();
+    wfSel = null; wfHover = null;
     $('#overlay').hidden = true;
     $('#charge-label').textContent = tid === 'october' ? 'Hail' : 'Depth charge';
     if (tid === 'october') {
@@ -393,7 +412,8 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
     if (kind === 'ping') dropActive(c);
     else if (kind === 'buoy') {
       const id = 'B' + (S.buoys.filter(b => b.kind === 'passive').length + 1);
-      S.buoys.push({ x: c.x, y: c.y, id, kind: 'passive', born: S.turn });
+      S.buoys.push({ x: c.x, y: c.y, id, kind: 'passive', born: S.turn, wf: [] });
+      wfSel = id;
       S.buoysLeft--;
       log(`Sonobuoy ${id} in the water at ${gridName(c)}.`, 'phos');
       tone(520, 0.25, 0.08);
@@ -609,13 +629,148 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
           if (S.tid === 'october' && !S.octSaid) { S.octSaid = true; log('Jonesy: Computer calls it a seismic anomaly. Magma displacement. I don’t buy it. That’s man-made.', 'quote'); }
         }
       }
+      let bioAng = null;
       if (rand() < 0.035) {
         const ang = rand() * Math.PI * 2;
+        bioAng = ang;
         addMark({ k: 'brg', x: b.x, y: b.y, ang, err: 0.3, bio: true });
         log(`${b.id}: faint contact bearing ${deg(ang)}°. Jonesy: biologics. Probably whales.`, 'bio');
       }
+      waterfall(b, L, bioAng);
     });
   }
+
+  // ---------- waterfall ----------
+  // One row per line; WF_LINES lines per turn. The sub's trace scales with the same received level
+  // the detector uses, so a quiet boat can show as a faint, broken line well before a logged contact.
+  const brgTo = (b, x, y) => { let a = Math.atan2(x - b.x, -(y - b.y)); if (a < 0) a += Math.PI * 2; return a; };
+  function waterfall(b, L, bioAng) {
+    const sub = S.sub, src = [];
+    const ds = Math.hypot(sub.x - b.x, sub.y - b.y);
+    if (ds <= PASSIVE_R) {
+      const lvl = L * (1 - ds / PASSIVE_R) * (jonesy ? 1.3 : 1) + (ds < 1 ? 0.3 : 0);
+      src.push({ a: brgTo(b, sub.x, sub.y), amp: Math.min(1, 0.1 + lvl * 2.4), w: jonesy ? 0.6 : 0.9, steady: Math.min(1, 0.45 + lvl * 2), jit: jonesy ? 1 : 2 });
+    }
+    S.ships.forEach(s => {
+      if (s.st !== 'ok' || s.x < 0) return;
+      const d = Math.hypot(s.x - b.x, s.y - b.y);
+      if (d <= WF_SHIP_R) src.push({ a: brgTo(b, s.x, s.y), amp: 0.12 + 0.5 * (1 - d / WF_SHIP_R), w: 1.2, steady: 0.95, jit: 1 });
+    });
+    S.torps.forEach(t => {
+      const d = Math.hypot(t.x - b.x, t.y - b.y);
+      if (d <= WF_SHIP_R) src.push({ a: brgTo(b, t.x, t.y), amp: 1, w: 0.8, steady: 1, jit: 1 });
+    });
+    if (bioAng != null) src.push({ a: (bioAng + Math.PI * 4) % (Math.PI * 2), amp: 0.35, w: 2.5, steady: 0.6, jit: 6 });
+    for (let l = 0; l < WF_LINES; l++) {
+      const row = new Float32Array(WF_BINS);
+      for (let i = 0; i < WF_BINS; i++) row[i] = 0.04 + 0.18 * rand() * rand();
+      src.forEach(q => {
+        if (rand() > q.steady) return;
+        const c = ((q.a * 180 / Math.PI + gauss() * q.jit) / 360) * WF_BINS;
+        const amp = q.amp * (0.6 + 0.4 * rand());
+        for (let k = -3; k <= 3; k++) {
+          const i = ((Math.floor(c) + k) % WF_BINS + WF_BINS) % WF_BINS;
+          const dd = (i + 0.5 - c + WF_BINS * 1.5) % WF_BINS - WF_BINS / 2;
+          row[i] += amp * Math.exp(-(dd * dd) / (2 * q.w * q.w));
+        }
+      });
+      b.wf.unshift({ t: S.turn, row });
+    }
+    if (b.wf.length > WF_KEEP) b.wf.length = WF_KEEP;
+  }
+
+  function wfTabs() {
+    const box = $('#wf-tabs'), V = view();
+    const pas = V.buoys.filter(b => b.kind === 'passive');
+    if (wfSel && !pas.some(b => b.id === wfSel)) wfSel = null;
+    if (!wfSel && pas.length) wfSel = pas[pas.length - 1].id;
+    const sig = pas.map(b => b.id).join(',') + '|' + wfSel;
+    if (box.dataset.sig === sig) return;
+    box.dataset.sig = sig;
+    box.innerHTML = '';
+    if (!pas.length) { const p = document.createElement('p'); p.className = 'wf-hint'; p.textContent = 'Drop a passive buoy to start listening.'; box.append(p); return; }
+    pas.forEach(b => {
+      const t = document.createElement('button'); t.className = 'wf-tab'; t.textContent = b.id;
+      t.setAttribute('aria-pressed', String(b.id === wfSel));
+      t.addEventListener('click', () => { wfSel = b.id; wfHover = null; drawWF(); render(); });
+      box.append(t);
+    });
+  }
+
+  const wfc = $('#wf'), wctx = wfc.getContext('2d');
+  const WF_AX = 16, WF_TOP = 8;
+  function drawWF() {
+    if (!S) return;
+    wfTabs();
+    const V = view();
+    const w = wfc.clientWidth || 300, h = wfc.clientHeight || 196, dpr = window.devicePixelRatio || 1;
+    if (wfc.width !== Math.round(w * dpr) || wfc.height !== Math.round(h * dpr)) { wfc.width = Math.round(w * dpr); wfc.height = Math.round(h * dpr); }
+    wctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    wctx.fillStyle = C.sea2; wctx.fillRect(0, 0, w, h);
+    const b = V.buoys.find(x => x.id === wfSel && x.kind === 'passive');
+    const plotH = h - WF_AX - WF_TOP, lh = 2, bw = w / WF_BINS;
+    // time grid: one faint rule per 5 turns
+    if (b) {
+      const rows = b.wf.filter(e => e.t <= V.turn);
+      for (let j = 0; j < rows.length && j * lh < plotH; j++) {
+        const { row, t } = rows[j], y = WF_TOP + j * lh;
+        for (let i = 0; i < WF_BINS; i++) {
+          const v = Math.min(1, row[i]);
+          if (v < 0.06) continue;
+          wctx.fillStyle = rgba(C.phos, Math.pow(v, 1.35));
+          wctx.fillRect(i * bw, y, bw + 0.5, lh);
+        }
+        if (j % WF_LINES === 0 && t % 5 === 0) {
+          wctx.fillStyle = rgba(C.muted, 0.9); wctx.font = `500 9px 'IBM Plex Mono', monospace`; wctx.textAlign = 'right'; wctx.textBaseline = 'top';
+          wctx.fillText('T' + t, w - 2, y + 1);
+        }
+      }
+      // friendly bearing ticks
+      V.ships.forEach(s => {
+        if (s.st !== 'ok' || s.x < 0) return;
+        const x = brgTo(b, s.x, s.y) / (Math.PI * 2) * w;
+        wctx.fillStyle = rgba(C.fg, 0.85); wctx.beginPath(); wctx.moveTo(x, WF_TOP); wctx.lineTo(x - 3, 1); wctx.lineTo(x + 3, 1); wctx.closePath(); wctx.fill();
+      });
+    }
+    // axis
+    wctx.strokeStyle = C.line; wctx.lineWidth = 1;
+    wctx.beginPath(); wctx.moveTo(0, h - WF_AX + 0.5); wctx.lineTo(w, h - WF_AX + 0.5); wctx.stroke();
+    wctx.fillStyle = C.muted; wctx.font = `500 10px 'IBM Plex Mono', monospace`; wctx.textBaseline = 'middle';
+    [0, 90, 180, 270, 360].forEach(a => {
+      const x = a / 360 * w;
+      wctx.textAlign = a === 0 ? 'left' : a === 360 ? 'right' : 'center';
+      wctx.fillText(String(a).padStart(3, '0'), x, h - WF_AX / 2);
+      wctx.fillStyle = rgba(C.muted, 0.18); if (a % 360) wctx.fillRect(Math.round(x), WF_TOP, 1, plotH); wctx.fillStyle = C.muted;
+    });
+    if (wfHover && b) {
+      const x = wfHover.ang / (Math.PI * 2) * w;
+      wctx.strokeStyle = rgba(C.fg, 0.7); wctx.setLineDash([3, 3]);
+      wctx.beginPath(); wctx.moveTo(x + 0.5, WF_TOP); wctx.lineTo(x + 0.5, h - WF_AX); wctx.stroke(); wctx.setLineDash([]);
+    }
+    if (!b) {
+      wctx.fillStyle = C.muted; wctx.textAlign = 'center'; wctx.font = `500 12px 'IBM Plex Sans', sans-serif`;
+      wctx.fillText('No passive buoy selected', w / 2, WF_TOP + plotH / 2);
+    }
+  }
+  function wfAngAt(e) {
+    const r = wfc.getBoundingClientRect();
+    return Math.max(0, Math.min(0.9999, (e.clientX - r.left) / r.width)) * Math.PI * 2;
+  }
+  function wfBuoy() { return S && S.buoys.find(x => x.id === wfSel && x.kind === 'passive'); }
+  wfc.addEventListener('pointermove', e => {
+    const b = wfBuoy(); if (!b) return;
+    wfHover = { id: b.id, ang: wfAngAt(e) };
+    $('#wf-read').textContent = `${b.id} bearing ${deg(wfHover.ang)}°${S.over || RP ? '' : ' · click to plot'}`;
+    drawWF(); render();
+  });
+  wfc.addEventListener('pointerleave', () => { wfHover = null; $('#wf-read').textContent = 'Bearing across, newest at the top. Click a trace to plot it.'; drawWF(); render(); });
+  wfc.addEventListener('click', e => {
+    const b = wfBuoy(); if (!b || S.over || RP) return;
+    const ang = wfAngAt(e);
+    addMark({ k: 'brg', x: b.x, y: b.y, ang, err: 0, manual: true });
+    log(`Plotted bearing ${deg(ang)}° from ${b.id}.`, 'dim');
+    updateUI(); render();
+  });
 
   function end(result, reason, why) {
     const T = S.T, oct = S.tid === 'october';
@@ -680,6 +835,7 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
     $('#n-ping').textContent = S.activeLeft;
     $('#n-charge').textContent = S.charges;
     renderLog();
+    drawWF();
   }
   function setMode(m) {
     mode = m;
@@ -710,7 +866,7 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
     const dpr = window.devicePixelRatio || 1;
     cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    render();
+    render(); drawWF();
   }
 
   // ---------- replay ----------
@@ -731,7 +887,7 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
     $('#rp-events').textContent = S.log.filter(e => e.t === t && !e.text.startsWith('Holding position')).reverse().map(e => e.text).join('  ·  ') || 'No contacts.';
     S.buoys.forEach(b => { if (pinging(b, t)) anims.push({ k: 'ping', x: b.x, y: b.y, t0: performance.now() }); });
     S.allMarks.forEach(m => { if (m.k === 'boom' && m.born === t) anims.push({ k: 'boom', x: m.x, y: m.y, t0: performance.now() }); });
-    render();
+    render(); drawWF();
   }
   function playReplay() {
     clearInterval(RP.timer);
@@ -752,7 +908,7 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
     clearInterval(RP.timer); RP = null;
     $('#replay').hidden = true; $('.tools').hidden = false;
   }
-  function closeReplay() { stopReplay(); $('#overlay').hidden = false; render(); }
+  function closeReplay() { stopReplay(); $('#overlay').hidden = false; render(); drawWF(); }
 
   function render() {
     const S = view();
@@ -830,6 +986,10 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
           ctx.beginPath(); ctx.arc(cx, cy, m.r * cs, 0, Math.PI * 2); ctx.stroke();
         }
         ctx.fillStyle = rgba(C.amber, fade); ctx.beginPath(); ctx.arc(cx, cy, 3, 0, Math.PI * 2); ctx.fill();
+      } else if (m.k === 'brg' && m.manual) {
+        const R = PASSIVE_R * cs, a = m.ang - Math.PI / 2;
+        ctx.strokeStyle = rgba(C.fg, 0.75 * fade); ctx.lineWidth = 1.25; ctx.setLineDash([6, 4]);
+        ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + Math.cos(a) * R, cy + Math.sin(a) * R); ctx.stroke(); ctx.setLineDash([]);
       } else if (m.k === 'brg') {
         const col = m.bio ? C.bio : m.torp ? C.red : C.phos;
         const a0 = m.ang - m.err - Math.PI / 2, a1 = m.ang + m.err - Math.PI / 2, R = PASSIVE_R * cs;
@@ -900,6 +1060,17 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
       ctx.setLineDash([]);
       ctx.fillStyle = C.red; ctx.beginPath(); ctx.arc(cxp(t.x), cyp(t.y), Math.max(3, cs * 0.16), 0, Math.PI * 2); ctx.fill();
     });
+
+    // waterfall cursor preview
+    if (wfHover) {
+      const b = S.buoys.find(x => x.id === wfHover.id);
+      if (b) {
+        const R = PASSIVE_R * cs, a = wfHover.ang - Math.PI / 2, cx = cxp(b.x), cy = cyp(b.y);
+        ctx.strokeStyle = rgba(C.fg, 0.55); ctx.lineWidth = 1; ctx.setLineDash([3, 4]);
+        ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + Math.cos(a) * R, cy + Math.sin(a) * R); ctx.stroke(); ctx.setLineDash([]);
+        ctx.strokeStyle = C.fg; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(cx, cy, Math.max(6, cs * 0.4), 0, Math.PI * 2); ctx.stroke();
+      }
+    }
 
     // hover preview
     if (hover && !S.over) {
