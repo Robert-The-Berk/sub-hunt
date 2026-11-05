@@ -51,11 +51,11 @@ h1 { font-family: var(--f-display); font-weight: 700; font-size: clamp(30px, 5vw
 .mapscroll { overflow-x: auto; overflow-y: hidden; border-radius: 6px; }
 canvas#map { display: block; border: 1px solid var(--line); border-radius: 6px; background: var(--sea2); cursor: crosshair; touch-action: manipulation; }
 
-.tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.tools { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .tool {
-  font-family: var(--f-display); font-weight: 600; font-size: 15px; letter-spacing: .04em;
+  font-family: var(--f-display); font-weight: 600; font-size: 14px; letter-spacing: .03em;
   display: inline-flex; align-items: center; gap: 8px;
-  padding: 9px 14px; border-radius: 6px; border: 1px solid var(--line);
+  padding: 8px 11px; border-radius: 6px; border: 1px solid var(--line);
   background: var(--panel); color: var(--fg); cursor: pointer;
 }
 .tool:hover { border-color: var(--muted); }
@@ -126,6 +126,27 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
 
 .overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 16px; pointer-events: none; }
 .overlay .box { pointer-events: auto; background: color-mix(in srgb, var(--bg) 92%, transparent); border: 1px solid var(--line); border-radius: 8px; padding: 18px 20px; max-width: 420px; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 12px 40px rgba(0,0,0,.5); }
+.overlay .box { max-height: calc(100% - 8px); overflow-y: auto; }
+.seg { display: flex; border: 1px solid var(--line); border-radius: 5px; overflow: hidden; }
+.seg button { flex: 1; font: 600 13px var(--f-display); letter-spacing: .04em; padding: 7px 8px; background: var(--sea2); color: var(--muted); border: 0; cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button[aria-pressed="true"] { background: var(--sea1); color: var(--fg); }
+.seg button:focus-visible { outline: 2px solid var(--phos); outline-offset: -2px; }
+.camp-track { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; }
+.camp-track div { border: 1px solid var(--line); border-radius: 4px; padding: 4px 2px; text-align: center; font: 500 11px var(--f-mono); color: var(--muted); display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.camp-track .cur { border-color: var(--phos); color: var(--fg); }
+.camp-track .st { color: var(--amber); letter-spacing: .05em; }
+.camp-name { font-family: var(--f-display); font-size: 17px; font-weight: 700; line-height: 1.15; }
+.camp-brief { font-size: 13px; color: var(--fg); opacity: .85; margin: 0; }
+.camp-pool { font-family: var(--f-mono); font-size: 12px; color: var(--muted); }
+.camp-pool b { color: var(--fg); font-weight: 500; }
+.small:disabled { opacity: .45; cursor: not-allowed; }
+.stars { color: var(--amber); font-size: 22px; letter-spacing: .12em; line-height: 1; }
+.stars .off { color: var(--line); }
+.score { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 3px 14px; font-size: 13px; }
+.score .v { font-family: var(--f-mono); text-align: right; font-variant-numeric: tabular-nums; }
+.score .tot { border-top: 1px solid var(--line); padding-top: 5px; margin-top: 2px; font-weight: 600; }
+.overlay .best { font-size: 12px; color: var(--phos); }
 .overlay h3 { font-family: var(--f-display); font-size: 26px; margin: 0; line-height: 1.05; }
 .overlay h3.win { color: var(--phos); }
 .overlay h3.lose { color: var(--red); }
@@ -179,9 +200,23 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
     <aside>
       <div class="card">
         <h2>Mission</h2>
-        <div class="row">
+        <div class="seg" role="group" aria-label="Game mode">
+          <button id="mode-quick" aria-pressed="true">Quick hunt</button>
+          <button id="mode-camp" aria-pressed="false">Campaign</button>
+        </div>
+        <div id="quick-panel" class="row">
           <select id="mission" aria-label="Choose a target"></select>
           <button class="small" id="new">New hunt</button>
+        </div>
+        <div id="camp-panel" hidden style="display:flex;flex-direction:column;gap:8px">
+          <div class="camp-track" id="camp-track"></div>
+          <div class="camp-name" id="camp-name"></div>
+          <p class="camp-brief" id="camp-brief"></p>
+          <div class="camp-pool" id="camp-pool"></div>
+          <div class="row">
+            <button class="small" id="camp-go">Start mission</button>
+            <button class="small" id="camp-reset">Restart campaign</button>
+          </div>
         </div>
       </div>
 
@@ -239,6 +274,8 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
             <li>You lose if every ship is sunk, if you run out of charges, or if the sub reaches the escape line on the west edge.</li>
             <li><b>Plot pencil</b> (key 4): mark where you think the sub is and draw its likely course. It's free and doesn't use a turn. Guess marks show the turn you made them, so a row of them traces a course.</li>
             <li>Every action takes one turn. After each turn the sub moves.</li>
+            <li><b>Debrief</b>: each hunt is scored for sinking the sub, ships saved, speed and gear left over, with bonuses for using few active buoys and for not wasting charges on decoys. Up to 3 stars, and your best score for each target is saved.</li>
+            <li><b>Campaign</b>: five missions drawing from one supply pool. Gear you don't use goes back in the pool, and each win adds a small resupply. You can retry a failed mission, but the gear you spent is gone. Run out of depth charges and the campaign is over.</li>
             <li>When the hunt ends you can watch a replay of the sub's course, your buoys and every contact, turn by turn.</li>
           </ul>
         </details>
@@ -273,6 +310,14 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
       cruise: 0.6, sprint: 0.8, noise: 0.1, activeP: 0.95, torps: 0, aggr: 0, decoys: 1, secret: true,
       blurb: 'Captain Marko Ramius is running west. The caterpillar drive makes her nearly silent. Moscow wants her sunk. Find her first and hail her.' }
   };
+  const CAMPAIGN = [
+    { tid: 'leviathan', name: 'Shakedown', brief: 'A missile boat is shadowing the convoy. It is big and it is not subtle. Learn your gear and put it down.' },
+    { tid: 'whisper', name: 'Quiet Water', brief: 'A diesel boat is waiting on batteries along the route. You will hear very little. Listen hard and be patient.' },
+    { tid: 'barracuda', name: 'Fast Mover', brief: 'A fast attack boat is closing at speed. It will be loud, it will shoot early, and it will slip your pings.' },
+    { tid: 'minnow', name: 'Needle', brief: 'A midget sub is creeping toward the lane. Almost silent, almost invisible on active. Do not waste charges on guesses.' },
+    { tid: 'random', name: 'Ghost', brief: 'Something is out there and intel cannot say what. Classify it from what you hear, then kill it.' }
+  ];
+  const CAMP_POOL = { a: 18, p: 26, c: 18 }, CAMP_RESUPPLY = { a: 2, p: 3, c: 2 };
   const MISSIONS = [
     ['leviathan', 'Leviathan, missile sub (easy)'],
     ['whisper', 'Whisper, diesel boat (medium)'],
@@ -289,6 +334,11 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
   function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { return null; } }
   let unlocked = store('subhunt.october') === '1';
   let wfSel = null, wfHover = null, drag = null;
+  let playMode = 'quick', camp = loadCamp(), resetArm = 0;
+  function loadCamp() { try { const c = JSON.parse(store('subhunt.campaign') || 'null'); if (c && c.pool) return c; } catch (e) { /* bad save */ } return null; }
+  function saveCamp() { store('subhunt.campaign', camp ? JSON.stringify(camp) : ''); }
+  function freshCamp() { return { stage: 0, pool: Object.assign({}, CAMP_POOL), score: 0, stars: [], fails: 0, done: false }; }
+  function loadBest() { try { return JSON.parse(store('subhunt.best') || '{}') || {}; } catch (e) { return {}; } }
   let jonesy = false, muted = false, mode = 'ping', hover = null, cs = 20, S = null, anims = [], keybuf = '', RP = null;
 
   const rand = Math.random;
@@ -351,8 +401,10 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
     return { rocks, label: { x: cx + 1, y: cy } };
   }
 
-  function newGame() {
-    const mission = $('#mission').value;
+  // cfg: { mission, loadout: {a, p, c}, camp: stage index } — quick hunts read the select
+  function newGame(cfg) {
+    if (!cfg || cfg instanceof Event) cfg = { mission: $('#mission').value };
+    const mission = cfg.mission, load = cfg.loadout || { a: ACTIVE_BUOYS, p: BUOYS, c: CHARGES };
     let tid = mission, hidden = false;
     if (mission === 'october' && !unlocked) tid = 'leviathan';
     if (mission === 'random') { const pool = ['leviathan', 'whisper', 'barracuda', 'minnow']; tid = pool[Math.floor(rand() * pool.length)]; hidden = true; }
@@ -367,12 +419,16 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
       T, tid, hidden, rocks, label, lane, ships, torps: [], subTorps: T.torps, decoys: [], subDecoys: T.decoys, decoysUsed: 0, decoyCool: 0, decoyNew: null, creep: 0, cool: 0, atk: null, fired: false,
       sub: { x: sx, y: sy, ty: 2 + Math.floor(rand() * (ROWS - 4)), acc: 0, spd: T.cruise },
       trail: [[sx, sy]], alert: 0, noise: null, ivan: 0, ivanNow: false, ivanSaid: false, octSaid: false,
-      turn: 0, pings: 0, actives: 0, activeLeft: ACTIVE_BUOYS, heard: [], buoys: [], buoysLeft: BUOYS, charges: CHARGES, marks: [], allMarks: [], hist: [], plot: [], log: [], over: null, contacts: 0, lastContact: null
+      turn: 0, pings: 0, actives: 0, activeLeft: load.a, heard: [], buoys: [], buoysLeft: load.p, charges: load.c, load, camp: cfg.camp == null ? null : cfg.camp, decoyHits: 0, mission, marks: [], allMarks: [], hist: [], plot: [], log: [], over: null, contacts: 0, lastContact: null
     };
     stopReplay();
     wfSel = null; wfHover = null; drag = null;
     $('#overlay').hidden = true;
     $('#charge-label').textContent = tid === 'october' ? 'Hail' : 'Depth charge';
+    if (S.camp != null) {
+      const m = CAMPAIGN[S.camp];
+      log(`Campaign mission ${S.camp + 1} of ${CAMPAIGN.length}: ${m.name}. Loadout: ${load.a} active, ${load.p} passive, ${load.c} charges.`, 'quote');
+    }
     if (tid === 'october') {
       log('Intel: Red October left port and is running west for the escape line. Hail her before she crosses.', 'dim');
       log('Jonesy: Sonar manned and ready, Captain. If she is on the caterpillar, I will barely hear her.', 'quote');
@@ -542,7 +598,7 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
     const near = Math.max(dx, dy) <= 2;
     const hitDecoy = S.decoys.find(q => Math.abs(Math.round(q.x) - c.x) <= 1 && Math.abs(Math.round(q.y) - c.y) <= 1);
     if (hitDecoy && !oct) {
-      S.decoys = S.decoys.filter(q => q !== hitDecoy);
+      S.decoys = S.decoys.filter(q => q !== hitDecoy); S.decoyHits++;
       log(`Charge at ${gridName(c)}: the noise source cut out, but no breaking-up sounds. A decoy.`, 'red');
       S.alert = 4; S.noise = { x: c.x, y: c.y };
       if (near) launchDecoy();
@@ -870,7 +926,8 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
       h.textContent = oct ? 'Contact established' : 'Target destroyed';
       p.textContent = oct
         ? `Captain Ramius answers your hail at ${gridName(S.sub)}. Red October is defecting, and you found her first. Welcome to the New World.`
-        : `${S.hidden ? 'The unknown contact was a ' + T.name + ' (' + T.cls.toLowerCase() + '). ' : T.name + ' '}sunk at ${gridName(S.sub)} on turn ${S.turn}.`;
+        : S.hidden ? `The unknown contact was a ${T.name} (${T.cls.toLowerCase()}). Sunk at ${gridName(S.sub)} on turn ${S.turn}.`
+        : `${T.name} sunk at ${gridName(S.sub)} on turn ${S.turn}.`;
       if (S.actives === 1) lines.push(oct ? '“Re-verify our range to target. One ping only.” You found her with a single active buoy.' : 'One ping only: you won with a single active buoy.');
       if (S.actives === 0) lines.push('Silent hunter: you won without a single active buoy.');
       if (nShips && safe === nShips) lines.push('Convoy intact: not a single ship lost.');
@@ -888,15 +945,133 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
     }
     const meta = document.createElement('div'); meta.className = 'meta';
     meta.textContent = `Turns ${S.turn} · Pings ${S.pings} · Buoys ${S.buoys.length - S.actives}P/${S.actives}A · Contacts ${S.contacts} · Decoys ${S.decoysUsed}${nShips ? ` · Ships saved ${safe}/${nShips}` : ''}`;
-    const btn = document.createElement('button'); btn.className = 'small'; btn.textContent = 'Hunt again'; btn.id = 'again';
-    btn.addEventListener('click', newGame);
-    const rb = document.createElement('button'); rb.className = 'small'; rb.textContent = 'Watch replay'; rb.id = 'watch';
-    rb.addEventListener('click', startReplay);
-    const row = document.createElement('div'); row.className = 'row'; row.append(btn, rb);
     box.append(h, p);
     lines.forEach(l => { const a = document.createElement('p'); a.className = 'ach'; a.textContent = l; box.append(a); });
-    box.append(meta, row);
+
+    // debrief
+    const sc = scoreHunt(result === 'win');
+    const st = document.createElement('div'); st.className = 'stars'; st.innerHTML = starStr(sc.stars); st.setAttribute('aria-label', `${sc.stars} of 3 stars`);
+    const tbl = document.createElement('div'); tbl.className = 'score';
+    sc.rows.forEach(([k, v]) => { const a = document.createElement('span'); a.textContent = k; const b = document.createElement('span'); b.className = 'v'; b.textContent = (v > 0 ? '+' : '') + v.toLocaleString(); tbl.append(a, b); });
+    const tk = document.createElement('span'); tk.className = 'tot'; tk.textContent = 'Score';
+    const tv = document.createElement('span'); tv.className = 'tot v'; tv.textContent = sc.total.toLocaleString();
+    tbl.append(tk, tv);
+    box.append(st, tbl);
+    const bestKey = S.mission === 'random' ? 'random' : S.tid;
+    const best = loadBest(), prevBest = best[bestKey] || 0;
+    const bl = document.createElement('div'); bl.className = 'best';
+    if (S.camp == null) {
+      if (sc.total > prevBest) { best[bestKey] = sc.total; store('subhunt.best', JSON.stringify(best)); }
+      bl.textContent = sc.total > prevBest && prevBest > 0 ? `New best for this target! Previous best ${prevBest.toLocaleString()}.`
+        : sc.total > prevBest ? 'First score on record for this target.' : `Best for this target: ${prevBest.toLocaleString()}.`;
+      box.append(bl);
+    }
+
+    const row = document.createElement('div'); row.className = 'row';
+    const mk = (label, id, fn) => { const b = document.createElement('button'); b.className = 'small'; b.textContent = label; b.id = id; b.addEventListener('click', fn); return b; };
+    if (S.camp != null && camp && camp.stage === S.camp && !camp.done) {
+      // return unused gear to the pool, resupply on a win
+      camp.pool.a += S.activeLeft; camp.pool.p += S.buoysLeft; camp.pool.c += S.charges;
+      const cp = document.createElement('p'); cp.className = 'ach';
+      if (result === 'win') {
+        camp.score += sc.total; camp.stars[S.camp] = sc.stars; camp.stage++;
+        if (camp.stage < CAMPAIGN.length) { Object.keys(CAMP_RESUPPLY).forEach(k => camp.pool[k] += CAMP_RESUPPLY[k]); }
+        else camp.done = true;
+      } else camp.fails++;
+      saveCamp(); renderCamp();
+      const poolTxt = `Supplies now ${camp.pool.a} active, ${camp.pool.p} passive, ${camp.pool.c} charges.`;
+      if (camp.done) {
+        const tot = camp.stars.reduce((a, b) => a + (b || 0), 0);
+        const cb = +(store('subhunt.campbest') || 0);
+        if (camp.score > cb) store('subhunt.campbest', String(camp.score));
+        cp.textContent = `Campaign complete: ${camp.score.toLocaleString()} points, ${tot} of ${CAMPAIGN.length * 3} stars, ${camp.fails} failed attempt${camp.fails === 1 ? '' : 's'}. ${camp.score > cb ? (cb ? 'New campaign best!' : 'First campaign on record.') : 'Campaign best: ' + cb.toLocaleString() + '.'}`;
+        box.append(cp, meta);
+        row.append(mk('New campaign', 'again', () => { camp = freshCamp(); saveCamp(); renderCamp(); startCampMission(); }));
+      } else if (result === 'win') {
+        cp.textContent = `Mission ${S.camp + 1} complete. Campaign score ${camp.score.toLocaleString()}. Resupply: +${CAMP_RESUPPLY.a} active, +${CAMP_RESUPPLY.p} passive, +${CAMP_RESUPPLY.c} charges. ${poolTxt}`;
+        box.append(cp, meta);
+        row.append(mk(`Next: ${CAMPAIGN[camp.stage].name}`, 'again', startCampMission));
+      } else {
+        const can = camp.pool.c > 0;
+        cp.textContent = can ? `Mission failed. The gear you used is gone. ${poolTxt}` : 'Mission failed, and there are no depth charges left in the pool. The campaign is over.';
+        box.append(cp, meta);
+        row.append(can ? mk('Retry mission', 'again', startCampMission) : mk('New campaign', 'again', () => { camp = freshCamp(); saveCamp(); renderCamp(); startCampMission(); }));
+      }
+    } else {
+      box.append(meta);
+      row.append(mk('Hunt again', 'again', () => newGame()));
+    }
+    row.append(mk('Watch replay', 'watch', startReplay));
+    box.append(row);
     $('#overlay').hidden = false;
+  }
+
+  // ---------- scoring ----------
+  function scoreHunt(win) {
+    const nShips = S.ships.length, safe = S.ships.filter(s => s.st !== 'sunk').length, oct = S.tid === 'october', rows = [];
+    if (win) rows.push([oct ? 'Red October found' : 'Target sunk', 1000]);
+    if (nShips) rows.push([`Ships saved ${safe}/${nShips}`, safe * 300]);
+    if (win) {
+      rows.push([`Speed (turn ${S.turn})`, Math.max(0, (90 - S.turn) * 5)]);
+      rows.push([`Gear left: ${S.charges} ch, ${S.activeLeft} act, ${S.buoysLeft} pas`, S.charges * 60 + S.activeLeft * 25 + S.buoysLeft * 15]);
+      if (S.actives === 0) rows.push(['Silent hunter', 200]); else if (S.actives === 1) rows.push(['One ping only', 150]);
+      if (S.decoysUsed > 0 && S.decoyHits === 0) rows.push(['Not fooled by decoys', 150]);
+    }
+    const total = rows.reduce((a, r) => a + r[1], 0);
+    const [two, three] = nShips ? [2000, 2600] : [1250, 1500];
+    return { rows, total, stars: !win ? 0 : total >= three ? 3 : total >= two ? 2 : 1 };
+  }
+  const starStr = n => [1, 2, 3].map(i => i <= n ? '★' : '<span class="off">★</span>').join('');
+
+  // ---------- campaign ----------
+  function setPlayMode(m) {
+    playMode = m;
+    $('#mode-quick').setAttribute('aria-pressed', String(m === 'quick'));
+    $('#mode-camp').setAttribute('aria-pressed', String(m === 'camp'));
+    $('#quick-panel').hidden = m !== 'quick';
+    $('#camp-panel').hidden = m !== 'camp';
+    if (m === 'camp' && !camp) { camp = freshCamp(); saveCamp(); }
+    renderCamp();
+  }
+  function campLoadout() {
+    return { a: Math.min(ACTIVE_BUOYS, camp.pool.a), p: Math.min(BUOYS, camp.pool.p), c: Math.min(CHARGES, camp.pool.c) };
+  }
+  function renderCamp() {
+    if (!camp) return;
+    const tr = $('#camp-track'); tr.innerHTML = '';
+    CAMPAIGN.forEach((m, i) => {
+      const d = document.createElement('div');
+      if (i === camp.stage && !camp.done) d.className = 'cur';
+      const n = document.createElement('span'); n.textContent = 'M' + (i + 1);
+      const st = document.createElement('span'); st.className = 'st';
+      st.innerHTML = camp.stars[i] != null ? starStr(camp.stars[i]) : '·';
+      d.title = m.name; d.append(n, st); tr.append(d);
+    });
+    const go = $('#camp-go');
+    if (camp.done) {
+      $('#camp-name').textContent = 'Campaign complete';
+      $('#camp-brief').textContent = `Final score ${camp.score.toLocaleString()}. Restart to try for a better run.`;
+      go.disabled = true; go.textContent = 'Start mission';
+    } else {
+      const m = CAMPAIGN[camp.stage], L = campLoadout();
+      $('#camp-name').textContent = `Mission ${camp.stage + 1} of ${CAMPAIGN.length}: ${m.name}`;
+      $('#camp-brief').textContent = m.brief;
+      go.disabled = camp.pool.c <= 0;
+      go.textContent = camp.pool.c <= 0 ? 'Out of charges' : S && S.camp === camp.stage && !S.over ? 'Mission underway' : 'Start mission';
+      if (S && S.camp === camp.stage && !S.over) go.disabled = true;
+      $('#camp-pool').innerHTML = `Supplies <b>${camp.pool.a}</b> active · <b>${camp.pool.p}</b> passive · <b>${camp.pool.c}</b> charges<br>Next loadout ${L.a} / ${L.p} / ${L.c} · Score <b>${camp.score.toLocaleString()}</b>`;
+      return;
+    }
+    $('#camp-pool').innerHTML = `Score <b>${camp.score.toLocaleString()}</b> · Best <b>${(+(store('subhunt.campbest') || 0)).toLocaleString()}</b>`;
+  }
+  function startCampMission() {
+    if (!camp || camp.done || camp.pool.c <= 0) return;
+    setPlayMode('camp');
+    const L = campLoadout();
+    camp.pool.a -= L.a; camp.pool.p -= L.p; camp.pool.c -= L.c;
+    saveCamp();
+    newGame({ mission: CAMPAIGN[camp.stage].tid, loadout: L, camp: camp.stage });
+    renderCamp();
   }
 
   // ---------- UI ----------
@@ -1273,11 +1448,21 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
   $('#m-buoy').addEventListener('click', () => setMode('buoy'));
   $('#m-charge').addEventListener('click', () => setMode('charge'));
   $('#wait').addEventListener('click', () => act('wait'));
-  $('#new').addEventListener('click', newGame);
+  $('#new').addEventListener('click', () => newGame());
+  $('#mode-quick').addEventListener('click', () => { if (playMode === 'quick') return; setPlayMode('quick'); newGame(); });
+  $('#mode-camp').addEventListener('click', () => setPlayMode('camp'));
+  $('#camp-go').addEventListener('click', startCampMission);
+  $('#camp-reset').addEventListener('click', () => {
+    const b = $('#camp-reset');
+    if (Date.now() - resetArm > 3000) { resetArm = Date.now(); b.textContent = 'Click again to restart'; setTimeout(() => { b.textContent = 'Restart campaign'; }, 3000); return; }
+    resetArm = 0; b.textContent = 'Restart campaign';
+    camp = freshCamp(); saveCamp(); renderCamp();
+    flash('Campaign restarted with full supplies.');
+  });
   $('#rp-play').addEventListener('click', () => RP && (RP.playing ? pauseReplay() : playReplay()));
   $('#rp-close').addEventListener('click', closeReplay);
   $('#rp-slider').addEventListener('input', e => { if (!RP) return; pauseReplay(); setReplayTurn(+e.target.value); });
-  $('#mission').addEventListener('change', newGame);
+  $('#mission').addEventListener('change', () => { setPlayMode('quick'); newGame(); });
   $('#mute').addEventListener('click', () => {
     muted = !muted;
     $('#mute').textContent = muted ? 'Sound off' : 'Sound on';
@@ -1290,7 +1475,7 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
     keybuf = (keybuf + (e.key || '').toLowerCase()).slice(-10);
     if (keybuf.endsWith('ramius')) {
       unlocked = true; store('subhunt.october', '1'); buildMissions();
-      $('#mission').value = 'october'; newGame();
+      $('#mission').value = 'october'; setPlayMode('quick'); newGame();
       flash('Classified mission unlocked: Red October.');
       return;
     }

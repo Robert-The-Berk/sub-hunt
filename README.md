@@ -26,6 +26,23 @@ Four friendly merchant ships sail east along a marked route. The sub closes to w
 
 You have 6 active buoys, 8 passive buoys and 6 depth charges. You lose if every ship is sunk, if you run out of charges, or if the sub crosses the escape line. The Red October mission has no convoy.
 
+## Debrief and scoring
+Every hunt ends with a scored debrief:
+
+| | Points |
+| --- | --- |
+| Sub sunk (or Red October found) | 1,000 |
+| Each convoy ship saved | 300 |
+| Speed, on a win | 5 × (90 − turns), never below 0 |
+| Gear left, on a win | 60 per charge, 25 per active buoy, 15 per passive buoy |
+| Silent hunter / One ping only | 200 / 150 |
+| Not fooled by decoys (sub used decoys, you never charged one) | 150 |
+
+A win earns 1 star, 2 stars from 2,000 points and 3 stars from 2,600 (1,250 and 1,500 on missions with no convoy). Your best quick-hunt score for each target is saved.
+
+## Campaign
+Five missions in a row (**Shakedown**, **Quiet Water**, **Fast Mover**, **Needle** and **Ghost**) drawing from one supply pool: 18 active buoys, 26 passive buoys and 18 depth charges. Each mission takes up to the normal loadout from the pool. Unused gear goes back afterwards, and each win adds +2 active, +3 passive and +2 charges. You can retry a failed mission, but what you spent is gone. If the pool runs out of charges, the campaign is over. Progress, the campaign score and your best campaign are saved in the browser. Starting a mission takes its gear from the pool straight away, so leaving mid-mission forfeits it.
+
 ## Subs
 | Sub | Size | Speed | Active | Passive | Torpedoes | Decoys |
 | --- | --- | --- | --- | --- | --- | --- |
