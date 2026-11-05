@@ -9,6 +9,9 @@ Open `index.html` in a browser to play. No build step.
 - **Counter-detection**: the sub hears pings out to 24 nmi, much further than you can hear its echo. When it does, it sprints and steers to stay out of that buoy's range, so lay active buoys where it has to go.
 - **Passive buoys** (8): silent, report a bearing up to 16 nmi. Fast subs are loud; slow subs are quiet.
 
+## Decoys
+When a ping catches it or a depth charge lands close, the sub may drop a noisemaker and creep away deep and slow for a few turns, holding its torpedoes. A decoy echoes like the sub on active buoys, but there are tells: passive buoys report broadband noise with **no clear blade rate**, its waterfall trace is broad and smeared, it barely moves, and a buoy may catch a **short mechanical transient** when one is launched. A charge on a decoy reports the noise cutting out with no breaking-up sounds. With Jonesy on watch, he calls them out.
+
 ## Sonar waterfall
 The waterfall shows what one passive buoy hears: bearing across, time going down, newest at the top. Pick the buoy from the tabs. Convoy ships, torpedoes and whales all leave traces, and white ticks mark the friendly bearings. The sub's trace appears even when it is too faint for a logged contact, so a weak line holding a steady bearing is worth acting on. Hover to read a bearing, and click to plot it on the map.
 
@@ -24,10 +27,10 @@ Four friendly merchant ships sail east along a marked route. The sub closes to w
 You have 6 active buoys, 8 passive buoys and 6 depth charges. You lose if every ship is sunk, if you run out of charges, or if the sub crosses the escape line. The Red October mission has no convoy.
 
 ## Subs
-| Sub | Size | Speed | Active | Passive | Torpedoes |
-| --- | --- | --- | --- | --- | --- |
-| Leviathan | Huge | Medium | Easy | Fair | 2 |
-| Whisper | Medium | Slow | Fair | Hard | 4 |
-| Barracuda | Small | Fast | Hard | Easy | 4 |
-| Minnow | Tiny | Very slow | Very hard | Very hard | 2 |
-| Red October (secret) | Huge | Medium | Easy | Very hard | 0 |
+| Sub | Size | Speed | Active | Passive | Torpedoes | Decoys |
+| --- | --- | --- | --- | --- | --- | --- |
+| Leviathan | Huge | Medium | Easy | Fair | 2 | 2 |
+| Whisper | Medium | Slow | Fair | Hard | 4 | 3 |
+| Barracuda | Small | Fast | Hard | Easy | 4 | 3 |
+| Minnow | Tiny | Very slow | Very hard | Very hard | 2 | 1 |
+| Red October (secret) | Huge | Medium | Easy | Very hard | 0 | 1 |

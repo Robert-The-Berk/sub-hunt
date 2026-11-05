@@ -197,6 +197,7 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
           <dt>Speed</dt><dd id="d-speed"></dd>
           <dt>Active sonar</dt><dd id="d-active"></dd>
           <dt>Passive sonar</dt><dd id="d-passive"></dd>
+          <dt>Decoys</dt><dd id="d-decoys"></dd>
         </dl>
       </div>
 
@@ -231,6 +232,7 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
             <li><b>The sub hears pings much further away</b> than you can hear echoes: out to 24 nmi (12 squares, the faint outer ring when you aim). When it hears one it speeds up and steers to stay out of that buoy's range, so drop them where it has to go, not where it is.</li>
             <li><b>No return</b> doesn't prove the sub isn't there. A small sub can sit inside the circle and still not echo.</li>
             <li><b>Sonobuoys</b> (teal) listen silently every turn up to 16 nmi away and report a bearing, not a range. Fast subs are loud; slow ones are hard to hear.</li>
+            <li><b>Decoys</b>: when a ping catches it or a charge lands close, the sub may drop a noisemaker and creep away deep and slow. A decoy echoes like a hull, but passive buoys hear broadband noise with no blade rate, its waterfall trace is broad and smeared, and it barely moves. A short mechanical transient on a buoy can mean one was just launched.</li>
             <li><b>Sonar waterfall</b>: shows what one passive buoy hears, bearing across and time going down. A steady line is something making noise. It shows the sub even when it is too faint for a logged contact, so look for a weak line that keeps the same bearing turn after turn. Small marks at the top show where the friendly ships are. Click a line to plot that bearing on the map.</li>
             <li><b>Depth charges</b> (red) hit a 3×3 area where the sub is now, before it moves. You can't drop one on top of a friendly ship.</li>
             <li><b>The convoy</b> (white hulls) sails east along the dashed route. The sub will close to within 8 nmi and fire torpedoes. A launch is loud: the targeted ship reports a red bearing and you can see the torpedo run, so you get one turn to answer. A sub that has just been pinged or charged is more cautious about firing.</li>
@@ -251,23 +253,24 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
   const BUOYS = 8, ACTIVE_BUOYS = 6, ACTIVE_LIFE = 4, COUNTER_R = 12, CHARGES = 6, ATTACK_R = 4, TORP_SPD = 3, TORP_HIT = 0.7, CONVOY_SPD = 0.8, MOVE_SCALE = 1.5, CONVOY_N = 4, MIN_CS = 15;
   const SHIP_NAMES = ['MV Aurora', 'MV Kestrel', 'SS Halcyon', 'MV Northern Star', 'MV Saltire', 'SS Meridian', 'MV Bluebell', 'MV Cormorant'];
   const LM = 24, TM = 18;
-  const WF_BINS = 90, WF_LINES = 4, WF_KEEP = 200, WF_SHIP_R = 14;
+  const DECOY_LIFE = 5, DECOY_NOISE = 0.7, DECOY_ECHO = 0.85, CREEP = 3;
+  const WF_BINS = 90, WF_LINES = 4, WF_KEEP = 2400, WF_SHIP_R = 14;
 
   const TYPES = {
     leviathan: { name: 'Leviathan', cls: 'Ballistic missile submarine', size: 'Huge', sizeN: 4, speedLabel: 'Medium',
-      cruise: 0.55, sprint: 0.85, noise: 1.0, activeP: 0.95, torps: 2, aggr: 0.3,
+      cruise: 0.55, sprint: 0.85, noise: 1.0, activeP: 0.95, torps: 2, aggr: 0.3, decoys: 2,
       blurb: 'A giant missile boat. It echoes like a cathedral on active sonar, and it is loud enough to hear when it hurries.' },
     whisper: { name: 'Whisper', cls: 'Diesel-electric attack boat', size: 'Medium', sizeN: 3, speedLabel: 'Slow',
-      cruise: 0.45, sprint: 0.8, noise: 0.85, activeP: 0.75, torps: 4, aggr: 0.5,
+      cruise: 0.45, sprint: 0.8, noise: 0.85, activeP: 0.75, torps: 4, aggr: 0.5, decoys: 3,
       blurb: 'Running on batteries it is almost silent. Pings will usually find it; buoys will struggle.' },
     barracuda: { name: 'Barracuda', cls: 'Fast attack submarine', size: 'Small', sizeN: 2, speedLabel: 'Fast',
-      cruise: 1.0, sprint: 1.4, noise: 1.0, activeP: 0.5, torps: 4, aggr: 0.6,
+      cruise: 1.0, sprint: 1.4, noise: 1.0, activeP: 0.5, torps: 4, aggr: 0.6, decoys: 3,
       blurb: 'Small and quick. Its screws scream on passive sonar, but its hull often slips past a ping.' },
     minnow: { name: 'Minnow', cls: 'Midget submarine', size: 'Tiny', sizeN: 1, speedLabel: 'Very slow',
-      cruise: 0.35, sprint: 0.6, noise: 0.8, activeP: 0.3, torps: 2, aggr: 0.45,
+      cruise: 0.35, sprint: 0.6, noise: 0.8, activeP: 0.3, torps: 2, aggr: 0.45, decoys: 1,
       blurb: 'Tiny and patient. Hard to hear, hard to echo. It takes a long time to reach the line, so you will need that time.' },
     october: { name: 'Red October', cls: 'Typhoon-class, caterpillar drive', size: 'Huge', sizeN: 4, speedLabel: 'Medium',
-      cruise: 0.6, sprint: 0.8, noise: 0.1, activeP: 0.95, torps: 0, aggr: 0, secret: true,
+      cruise: 0.6, sprint: 0.8, noise: 0.1, activeP: 0.95, torps: 0, aggr: 0, decoys: 1, secret: true,
       blurb: 'Captain Marko Ramius is running west. The caterpillar drive makes her nearly silent. Moscow wants her sunk. Find her first and hail her.' }
   };
   const MISSIONS = [
@@ -361,7 +364,7 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
     let sx, sy;
     do { sx = COLS - 2 - Math.floor(rand() * 4); sy = 1 + Math.floor(rand() * (ROWS - 2)); } while (rocks.has(key(sx, sy)));
     S = {
-      T, tid, hidden, rocks, label, lane, ships, torps: [], subTorps: T.torps, cool: 0, atk: null, fired: false,
+      T, tid, hidden, rocks, label, lane, ships, torps: [], subTorps: T.torps, decoys: [], subDecoys: T.decoys, decoysUsed: 0, decoyCool: 0, decoyNew: null, creep: 0, cool: 0, atk: null, fired: false,
       sub: { x: sx, y: sy, ty: 2 + Math.floor(rand() * (ROWS - 4)), acc: 0, spd: T.cruise },
       trail: [[sx, sy]], alert: 0, noise: null, ivan: 0, ivanNow: false, ivanSaid: false, octSaid: false,
       turn: 0, pings: 0, actives: 0, activeLeft: ACTIVE_BUOYS, heard: [], buoys: [], buoysLeft: BUOYS, charges: CHARGES, marks: [], allMarks: [], hist: [], plot: [], log: [], over: null, contacts: 0, lastContact: null
@@ -438,6 +441,7 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
 
     moveConvoy();
     moveSub();
+    moveDecoys();
     if (!S.over) runTorps();
     if (!S.over) { listen(); pingAll(); }
     if (S.alert > 0) S.alert--;
@@ -450,7 +454,8 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
     S.hist[S.turn] = {
       sub: [S.sub.x, S.sub.y],
       ships: S.ships.map(s => ({ name: s.name, x: s.x, y: s.y, st: s.st })),
-      torps: S.torps.map(t => ({ x: t.x, y: t.y, trail: t.trail.slice() }))
+      torps: S.torps.map(t => ({ x: t.x, y: t.y, trail: t.trail.slice() })),
+      decoys: S.decoys.map(d => ({ x: d.x, y: d.y }))
     };
   }
   const activeLast = b => b.born + ACTIVE_LIFE - 1;
@@ -485,6 +490,16 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
         tone(1450, 0.6, 0.07, 0.15 + d * 0.08);
         contact();
       } else quiet.push(b.id);
+      S.decoys.forEach(q => {
+        const dq = Math.hypot(q.x - b.x, q.y - b.y);
+        if (dq <= ACTIVE_R && rand() < DECOY_ECHO) {
+          const r = Math.round(dq);
+          addMark({ k: 'ret', x: b.x, y: b.y, r });
+          const echo = ['', 'very faint echo', 'small echo', 'solid echo', 'big, hard echo'][T.sizeN];
+          log(`${b.id}: return at range ${r * NM} nmi, ${echo}.`, 'amber');
+          contact();
+        }
+      });
       if (d <= COUNTER_R) S.heard.push({ x: b.x + gauss() * 1.5, y: b.y + gauss() * 1.5, d }); // the sub's fix on the buoy is rough
       if (S.turn === activeLast(b)) log(`${b.id} has used its last ping and gone quiet.`, 'dim');
     });
@@ -494,7 +509,26 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
       S.alert = Math.max(S.alert, 3);
       const n = S.heard.reduce((a, h) => h.d < a.d ? h : a);
       S.noise = { x: n.x, y: n.y };
+      if (n.d <= ACTIVE_R + 1 && rand() < 0.6) launchDecoy();
     }
+  }
+
+  // ---------- decoys ----------
+  // A noisemaker: echoes like a hull, sounds like broadband hiss with no blade rate, barely moves.
+  // The sub drops it and creeps away deep and slow.
+  function launchDecoy() {
+    if (S.subDecoys <= 0 || S.decoyCool > 0 || S.over) return;
+    const sub = S.sub;
+    S.subDecoys--; S.decoysUsed++; S.decoyCool = 4; S.creep = CREEP;
+    const q = { x: sub.x, y: sub.y, dx: gauss() * 0.2, dy: gauss() * 0.2, left: DECOY_LIFE, said: false };
+    S.decoys.push(q);
+    S.decoyNew = q;
+  }
+  function moveDecoys() {
+    S.decoys.forEach(q => {
+      q.x = Math.max(0, Math.min(COLS - 1, q.x + q.dx)); q.y = Math.max(0, Math.min(ROWS - 1, q.y + q.dy)); q.left--;
+    });
+    S.decoys = S.decoys.filter(q => q.left > 0);
   }
 
   function doCharge(c) {
@@ -506,6 +540,16 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
     if (dx <= 1 && dy <= 1) { end('win'); return true; }
     addMark({ k: 'boom', x: c.x, y: c.y });
     const near = Math.max(dx, dy) <= 2;
+    const hitDecoy = S.decoys.find(q => Math.abs(Math.round(q.x) - c.x) <= 1 && Math.abs(Math.round(q.y) - c.y) <= 1);
+    if (hitDecoy && !oct) {
+      S.decoys = S.decoys.filter(q => q !== hitDecoy);
+      log(`Charge at ${gridName(c)}: the noise source cut out, but no breaking-up sounds. A decoy.`, 'red');
+      S.alert = 4; S.noise = { x: c.x, y: c.y };
+      if (near) launchDecoy();
+      if (S.charges === 0) end('lose', 'You are out of depth charges. The sub will reach the escape line unopposed.');
+      return false;
+    }
+    if (near && rand() < 0.7) launchDecoy();
     if (oct) log(near ? `Hail at ${gridName(c)}: no answer, but sonar hears something close.` : `Hail at ${gridName(c)}: no answer.`, 'red');
     else log(near ? `Charge at ${gridName(c)}: near miss. Hull popping noises close by.` : `Charge at ${gridName(c)}: miss.`, 'red');
     S.alert = 4; S.noise = { x: c.x, y: c.y };
@@ -517,11 +561,13 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
     const T = S.T, sub = S.sub;
     if (S.ivan === 0 && S.turn > 2 && rand() < 0.07) { S.ivan = 2; S.ivanSaid = false; }
     S.ivanNow = S.ivan > 0;
-    sub.spd = S.alert > 0 ? T.sprint : T.cruise;
-    S.atk = subTarget();
+    sub.spd = S.creep > 0 ? T.cruise * 0.6 : S.alert > 0 ? T.sprint : T.cruise;
+    S.atk = S.creep > 0 ? null : subTarget();
     sub.acc += sub.spd * MOVE_SCALE; // bigger ocean, same noise: squares cover ground faster than the speed rating
     while (sub.acc >= 1 && !S.over) { sub.acc -= 1; step(); }
     if (S.ivan > 0) S.ivan--;
+    if (S.creep > 0) S.creep--;
+    if (S.decoyCool > 0) S.decoyCool--;
     if (S.cool > 0) S.cool--;
     else if (S.atk && !S.over && !S.ivanNow && S.subTorps > 0 && Math.hypot(S.atk.x - sub.x, S.atk.y - sub.y) <= ATTACK_R
       && rand() < T.aggr * (S.alert > 0 ? 0.4 : 1)) launch(S.atk);
@@ -622,7 +668,9 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
     let L = S.T.noise * Math.pow(sub.spd, 1.5);
     if (S.ivanNow) L *= 1.6;
     if (S.fired) L += 0.5;
+    if (S.creep > 0) L *= 0.6; // deep and slow
     S.fired = false;
+    const fresh = S.decoyNew; S.decoyNew = null;
     S.buoys.forEach(b => {
       if (b.kind !== 'passive') return;
       const d = Math.hypot(sub.x - b.x, sub.y - b.y);
@@ -641,6 +689,23 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
           if (S.tid === 'october' && !S.octSaid) { S.octSaid = true; log('Jonesy: Computer calls it a seismic anomaly. Magma displacement. I don’t buy it. That’s man-made.', 'quote'); }
         }
       }
+      if (fresh) {
+        const dq = Math.hypot(fresh.x - b.x, fresh.y - b.y);
+        if (dq <= PASSIVE_R && rand() < 0.6) log(`${b.id}: short mechanical transient, bearing ${deg(brgTo(b, fresh.x, fresh.y))}°.`, 'phos');
+      }
+      S.decoys.forEach(q => {
+        const dq = Math.hypot(q.x - b.x, q.y - b.y);
+        if (dq > PASSIVE_R) return;
+        const pq = Math.min(0.9, DECOY_NOISE * (1 - dq / PASSIVE_R) * (jonesy ? 1.3 : 1));
+        if (rand() >= pq) return;
+        const errDeg = (6 + 14 * (1 - pq)) * (jonesy ? 0.5 : 1);
+        const ang = brgTo(b, q.x, q.y) + gauss() * errDeg * Math.PI / 180;
+        addMark({ k: 'brg', x: b.x, y: b.y, ang, err: errDeg * 1.6 * Math.PI / 180 });
+        log(`${b.id}: contact bearing ${deg(ang)}°, ${pq > 0.6 ? 'strong' : pq > 0.3 ? 'moderate' : 'weak'}. Broadband noise, no clear blade rate.`, 'phos');
+        tone(300, 0.35, 0.06);
+        contact();
+        if (jonesy && !q.said) { q.said = true; log('Jonesy: That’s a noisemaker, Captain. All hiss, no blade rate. She’s slipped off somewhere quiet.', 'quote'); }
+      });
       let bioAng = null;
       if (rand() < 0.035) {
         const ang = rand() * Math.PI * 2;
@@ -668,6 +733,10 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
       const d = Math.hypot(s.x - b.x, s.y - b.y);
       if (d <= WF_SHIP_R) src.push({ a: brgTo(b, s.x, s.y), amp: 0.12 + 0.5 * (1 - d / WF_SHIP_R), w: 1.2, steady: 0.95, jit: 1 });
     });
+    S.decoys.forEach(q => {
+      const d = Math.hypot(q.x - b.x, q.y - b.y);
+      if (d <= PASSIVE_R) src.push({ a: brgTo(b, q.x, q.y), amp: 0.3 + 0.45 * (1 - d / PASSIVE_R), w: 2.2, steady: 0.85, jit: 4 });
+    });
     S.torps.forEach(t => {
       const d = Math.hypot(t.x - b.x, t.y - b.y);
       if (d <= WF_SHIP_R) src.push({ a: brgTo(b, t.x, t.y), amp: 1, w: 0.8, steady: 1, jit: 1 });
@@ -686,7 +755,10 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
           row[i] += amp * Math.exp(-(dd * dd) / (2 * q.w * q.w));
         }
       });
-      b.wf.unshift({ t: S.turn, row });
+      // store compactly (0–255) so a whole game's history fits for the replay
+      const q8 = new Uint8Array(WF_BINS);
+      for (let i = 0; i < WF_BINS; i++) q8[i] = Math.min(255, Math.round(row[i] * 200));
+      b.wf.unshift({ t: S.turn, row: q8 });
     }
     if (b.wf.length > WF_KEEP) b.wf.length = WF_KEEP;
   }
@@ -727,7 +799,7 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
       for (let j = 0; j < rows.length && j * lh < plotH; j++) {
         const { row, t } = rows[j], y = WF_TOP + j * lh;
         for (let i = 0; i < WF_BINS; i++) {
-          const v = Math.min(1, row[i]);
+          const v = Math.min(1, row[i] / 200);
           if (v < 0.06) continue;
           wctx.fillStyle = rgba(C.phos, Math.pow(v, 1.35));
           wctx.fillRect(i * bw, y, bw + 0.5, lh);
@@ -815,7 +887,7 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
       if (why !== 'convoy') log(oct ? 'Red October crossed the line. Ramius is gone.' : `The ${T.name} reached the escape line.`, 'red');
     }
     const meta = document.createElement('div'); meta.className = 'meta';
-    meta.textContent = `Turns ${S.turn} · Pings ${S.pings} · Buoys ${S.buoys.length - S.actives}P/${S.actives}A · Contacts ${S.contacts}${nShips ? ` · Ships saved ${safe}/${nShips}` : ''}`;
+    meta.textContent = `Turns ${S.turn} · Pings ${S.pings} · Buoys ${S.buoys.length - S.actives}P/${S.actives}A · Contacts ${S.contacts} · Decoys ${S.decoysUsed}${nShips ? ` · Ships saved ${safe}/${nShips}` : ''}`;
     const btn = document.createElement('button'); btn.className = 'small'; btn.textContent = 'Hunt again'; btn.id = 'again';
     btn.addEventListener('click', newGame);
     const rb = document.createElement('button'); rb.className = 'small'; rb.textContent = 'Watch replay'; rb.id = 'watch';
@@ -838,6 +910,7 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
     $('#d-speed').innerHTML = hid ? '???' : `${T.speedLabel}`;
     $('#d-active').innerHTML = hid ? '???' : `${pips(activeLvl(T), 'amber')} ${LVL[activeLvl(T)]}`;
     $('#d-passive').innerHTML = hid ? '???' : `${pips(passiveLvl(T), 'phos')} ${LVL[passiveLvl(T)]}`;
+    $('#d-decoys').textContent = hid ? '???' : T.decoys;
     $('#s-turn').textContent = S.turn;
     $('#s-pings').textContent = S.pings;
     $('#s-contacts').textContent = S.contacts;
@@ -887,7 +960,7 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
   function replayView(t) {
     const h = S.hist[t] || S.hist[S.hist.length - 1];
     return Object.assign({}, S, {
-      turn: t, replaying: t < S.turn, sub: { x: h.sub[0], y: h.sub[1] }, ships: h.ships, torps: h.torps,
+      turn: t, replaying: t < S.turn, sub: { x: h.sub[0], y: h.sub[1] }, ships: h.ships, torps: h.torps, decoys: h.decoys || [],
       buoys: S.buoys.filter(b => b.born <= t),
       marks: S.allMarks.filter(m => m.born <= t && t - m.born <= MAX_AGE).map(m => Object.assign({}, m, { age: t - m.born })),
       trail: S.hist.slice(0, t + 1).filter(Boolean).map(x => x.sub),
@@ -1143,6 +1216,13 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
       ctx.beginPath();
       S.trail.forEach(([x, y], i) => { const X = cxp(Math.max(x, 0)), Y = cyp(y); i ? ctx.lineTo(X, Y) : ctx.moveTo(X, Y); });
       ctx.stroke(); ctx.setLineDash([]);
+      S.decoys.forEach(q => {
+        const X = cxp(q.x), Y = cyp(q.y), rr = cs * 0.3;
+        ctx.strokeStyle = rgba(C.bio, 0.9); ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.moveTo(X, Y - rr); ctx.lineTo(X + rr, Y); ctx.lineTo(X, Y + rr); ctx.lineTo(X - rr, Y); ctx.closePath(); ctx.stroke();
+        ctx.fillStyle = rgba(C.bio, 0.9); ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+        ctx.font = `500 ${Math.max(8, cs * 0.34)}px 'IBM Plex Mono', monospace`; ctx.fillText('decoy', X + rr + 3, Y);
+      });
       const X = cxp(Math.max(S.sub.x, 0)), Y = cyp(S.sub.y);
       ctx.fillStyle = S.replaying ? C.red : S.over.result === 'win' ? C.phos : C.red;
       ctx.beginPath(); ctx.ellipse(X, Y, cs * 0.55, cs * 0.24, 0, 0, Math.PI * 2); ctx.fill();
