@@ -47,7 +47,8 @@ h1 { font-family: var(--f-display); font-weight: 700; font-size: clamp(30px, 5vw
 
 .board { position: relative; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
 .mapbox { position: relative; }
-canvas#map { display: block; width: 100%; border: 1px solid var(--line); border-radius: 6px; background: var(--sea2); cursor: crosshair; touch-action: manipulation; }
+.mapscroll { overflow-x: auto; overflow-y: hidden; border-radius: 6px; }
+canvas#map { display: block; border: 1px solid var(--line); border-radius: 6px; background: var(--sea2); cursor: crosshair; touch-action: manipulation; }
 
 .tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .tool {
@@ -87,10 +88,10 @@ select { flex: 1; min-width: 0; font: 500 14px var(--f-body); color: var(--fg); 
 .pips.amber i.on { background: var(--amber); }
 .pips.phos i.on { background: var(--phos); }
 
-.status { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.status { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
 .status div { display: flex; flex-direction: column; gap: 2px; }
 .status b { font-family: var(--f-mono); font-size: 18px; font-weight: 500; font-variant-numeric: tabular-nums; }
-.status span { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.status span { font-size: 10px; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
 
 .log { list-style: none; margin: 0; padding: 0; max-height: 300px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
 .log li { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 6px; }
@@ -122,20 +123,20 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
     <div class="brand">
       <span class="eyebrow">ASW plotting table · 2 nmi grid</span>
       <h1>Sub Hunt</h1>
-      <p class="tagline">A submarine is running west for the escape line. Ping it, listen for it, and sink it before it gets away.</p>
+      <p class="tagline">An enemy submarine is stalking a friendly convoy on its way west to the escape line. Find it, sink it, and keep the convoy afloat.</p>
     </div>
   </header>
 
   <div class="layout">
     <section class="board" aria-label="Plotting table">
       <div class="mapbox" id="mapbox">
-        <canvas id="map" aria-label="Ocean grid. Click a square to use the selected sensor or weapon."></canvas>
+        <div class="mapscroll" id="mapscroll"><canvas id="map" aria-label="Ocean grid. Click a square to use the selected sensor or weapon."></canvas></div>
         <div class="overlay" id="overlay" hidden><div class="box" id="overlayBox"></div></div>
       </div>
       <div class="tools">
         <button class="tool ping" id="m-ping" aria-pressed="true" title="Give me a ping, Vasili."><span class="k">1</span>Active ping</button>
-        <button class="tool buoy" id="m-buoy" aria-pressed="false"><span class="k">2</span>Drop buoy <span class="n" id="n-buoy">5</span></button>
-        <button class="tool charge" id="m-charge" aria-pressed="false"><span class="k">3</span><span id="charge-label">Depth charge</span> <span class="n" id="n-charge">4</span></button>
+        <button class="tool buoy" id="m-buoy" aria-pressed="false"><span class="k">2</span>Drop buoy <span class="n" id="n-buoy">8</span></button>
+        <button class="tool charge" id="m-charge" aria-pressed="false"><span class="k">3</span><span id="charge-label">Depth charge</span> <span class="n" id="n-charge">6</span></button>
         <span class="spacer"></span>
         <button class="tool" id="wait"><span class="k">W</span>Wait and listen</button>
         <button class="tool" id="mute" aria-pressed="false" title="Sound on or off">Sound on</button>
@@ -173,6 +174,7 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
           <div><b id="s-turn">0</b><span>Turn</span></div>
           <div><b id="s-pings">0</b><span>Pings</span></div>
           <div><b id="s-contacts">0</b><span>Contacts</span></div>
+          <div><b id="s-convoy">–</b><span>Ships</span></div>
           <div><b id="s-last">–</b><span>Last</span></div>
         </div>
       </div>
@@ -189,7 +191,9 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
             <li><b>Active ping</b> (amber): click a square. If the sub is within 10 nmi (5 squares), you may get a return showing its range as a ring. Big subs echo reliably; small ones often don't. Pinging also warns the sub, so it speeds up and dodges.</li>
             <li><b>No return</b> doesn't prove the sub isn't there. A small sub can sit inside the circle and still not echo.</li>
             <li><b>Sonobuoys</b> (teal) listen silently every turn up to 16 nmi away and report a bearing, not a range. Fast subs are loud; slow ones are hard to hear.</li>
-            <li><b>Depth charges</b> (red) hit a 3×3 area where the sub is now, before it moves. Run out of charges or let it reach the escape line on the west edge and you lose.</li>
+            <li><b>Depth charges</b> (red) hit a 3×3 area where the sub is now, before it moves. You can't drop one on top of a friendly ship.</li>
+            <li><b>The convoy</b> (white hulls) sails east along the dashed route. The sub will close to within 8 nmi and fire torpedoes. A launch is loud: the targeted ship reports a red bearing and you can see the torpedo run, so you get one turn to answer. A sub that has just been pinged or charged is more cautious about firing.</li>
+            <li>You lose if every ship is sunk, if you run out of charges, or if the sub reaches the escape line on the west edge.</li>
             <li>Every action takes one turn. After each turn the sub moves.</li>
           </ul>
         </details>
@@ -200,24 +204,26 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
 
 <script>
 (() => {
-  const COLS = 24, ROWS = 16, ACTIVE_R = 5, PASSIVE_R = 8, NM = 2, MAX_AGE = 6;
+  const COLS = 40, ROWS = 26, ACTIVE_R = 5, PASSIVE_R = 8, NM = 2, MAX_AGE = 6;
+  const BUOYS = 8, CHARGES = 6, ATTACK_R = 4, TORP_SPD = 3, TORP_HIT = 0.7, CONVOY_SPD = 0.8, MOVE_SCALE = 1.5, CONVOY_N = 4, MIN_CS = 15;
+  const SHIP_NAMES = ['MV Aurora', 'MV Kestrel', 'SS Halcyon', 'MV Northern Star', 'MV Saltire', 'SS Meridian', 'MV Bluebell', 'MV Cormorant'];
   const LM = 24, TM = 18;
 
   const TYPES = {
     leviathan: { name: 'Leviathan', cls: 'Ballistic missile submarine', size: 'Huge', sizeN: 4, speedLabel: 'Medium',
-      cruise: 0.55, sprint: 0.85, noise: 1.0, activeP: 0.95,
+      cruise: 0.55, sprint: 0.85, noise: 1.0, activeP: 0.95, torps: 2, aggr: 0.3,
       blurb: 'A giant missile boat. It echoes like a cathedral on active sonar, and it is loud enough to hear when it hurries.' },
     whisper: { name: 'Whisper', cls: 'Diesel-electric attack boat', size: 'Medium', sizeN: 3, speedLabel: 'Slow',
-      cruise: 0.45, sprint: 0.8, noise: 0.85, activeP: 0.75,
+      cruise: 0.45, sprint: 0.8, noise: 0.85, activeP: 0.75, torps: 4, aggr: 0.5,
       blurb: 'Running on batteries it is almost silent. Pings will usually find it; buoys will struggle.' },
     barracuda: { name: 'Barracuda', cls: 'Fast attack submarine', size: 'Small', sizeN: 2, speedLabel: 'Fast',
-      cruise: 1.0, sprint: 1.4, noise: 1.0, activeP: 0.5,
+      cruise: 1.0, sprint: 1.4, noise: 1.0, activeP: 0.5, torps: 4, aggr: 0.6,
       blurb: 'Small and quick. Its screws scream on passive sonar, but its hull often slips past a ping.' },
     minnow: { name: 'Minnow', cls: 'Midget submarine', size: 'Tiny', sizeN: 1, speedLabel: 'Very slow',
-      cruise: 0.35, sprint: 0.6, noise: 0.8, activeP: 0.3,
+      cruise: 0.35, sprint: 0.6, noise: 0.8, activeP: 0.3, torps: 2, aggr: 0.45,
       blurb: 'Tiny and patient. Hard to hear, hard to echo. It takes a long time to reach the line, so you will need that time.' },
     october: { name: 'Red October', cls: 'Typhoon-class, caterpillar drive', size: 'Huge', sizeN: 4, speedLabel: 'Medium',
-      cruise: 0.6, sprint: 0.8, noise: 0.1, activeP: 0.95, secret: true,
+      cruise: 0.6, sprint: 0.8, noise: 0.1, activeP: 0.95, torps: 0, aggr: 0, secret: true,
       blurb: 'Captain Marko Ramius is running west. The caterpillar drive makes her nearly silent. Moscow wants her sunk. Find her first and hail her.' }
   };
   const MISSIONS = [
@@ -240,7 +246,9 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
   const rand = Math.random;
   const gauss = () => { let u = 0, v = 0; while (!u) u = rand(); while (!v) v = rand(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); };
   const key = (x, y) => x + ',' + y;
-  const gridName = c => String.fromCharCode(65 + c.x) + (c.y + 1);
+  const L1 = i => String.fromCharCode(65 + i);
+  const colName = x => x < 26 ? L1(x) : L1(Math.floor(x / 26) - 1) + L1(x % 26);
+  const gridName = c => colName(Math.round(c.x)) + (Math.round(c.y) + 1);
   const deg = a => { let d = Math.round(a * 180 / Math.PI) % 360; if (d < 0) d += 360; return String(d).padStart(3, '0'); };
   const loud = T => T.noise * Math.pow(T.cruise, 1.5);
   const activeLvl = T => T.activeP >= .9 ? 4 : T.activeP >= .7 ? 3 : T.activeP >= .45 ? 2 : 1;
@@ -277,14 +285,21 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
   }
 
   // ---------- setup ----------
-  function genRocks() {
+  function genRocks(lane) {
     const rocks = new Set();
-    const cx = 8 + Math.floor(rand() * 6), cy = 3 + Math.floor(rand() * (ROWS - 8));
-    const twins = [[cx, cy], [cx + 2 + Math.floor(rand() * 2), cy + 3 + Math.floor(rand() * 2)]];
+    const nearLane = y => Math.abs(y - lane) <= 1;
+    let cx, cy, cy2;
+    do {
+      cx = 10 + Math.floor(rand() * (COLS - 24)); cy = 2 + Math.floor(rand() * (ROWS - 8)); cy2 = cy + 3 + Math.floor(rand() * 2);
+    } while ([cy, cy + 1, cy2, cy2 + 1].some(nearLane));
+    const twins = [[cx, cy], [cx + 2 + Math.floor(rand() * 2), cy2]];
     twins.forEach(([x, y]) => [[0, 0], [1, 0], [0, 1], [1, 1]].forEach(([dx, dy]) => {
       if ((dx === 0 && dy === 0) || rand() < 0.85) rocks.add(key(x + dx, y + dy));
     }));
-    for (let i = 0; i < 4; i++) rocks.add(key(3 + Math.floor(rand() * (COLS - 10)), Math.floor(rand() * ROWS)));
+    for (let i = 0; i < 10; i++) {
+      const y = Math.floor(rand() * ROWS);
+      if (!nearLane(y)) rocks.add(key(3 + Math.floor(rand() * (COLS - 10)), y));
+    }
     return { rocks, label: { x: cx + 1, y: cy } };
   }
 
@@ -294,14 +309,17 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
     if (mission === 'october' && !unlocked) tid = 'leviathan';
     if (mission === 'random') { const pool = ['leviathan', 'whisper', 'barracuda', 'minnow']; tid = pool[Math.floor(rand() * pool.length)]; hidden = true; }
     const T = TYPES[tid];
-    const { rocks, label } = genRocks();
+    const lane = 5 + Math.floor(rand() * (ROWS - 10));
+    const { rocks, label } = genRocks(lane);
+    const names = SHIP_NAMES.slice().sort(() => rand() - 0.5).slice(0, CONVOY_N);
+    const ships = tid === 'october' ? [] : names.map((name, i) => ({ name, x: 4 - i * 2.5, y: lane, st: 'ok' }));
     let sx, sy;
     do { sx = COLS - 2 - Math.floor(rand() * 4); sy = 1 + Math.floor(rand() * (ROWS - 2)); } while (rocks.has(key(sx, sy)));
     S = {
-      T, tid, hidden, rocks, label,
+      T, tid, hidden, rocks, label, lane, ships, torps: [], subTorps: T.torps, cool: 0, atk: null, fired: false,
       sub: { x: sx, y: sy, ty: 2 + Math.floor(rand() * (ROWS - 4)), acc: 0, spd: T.cruise },
       trail: [[sx, sy]], alert: 0, noise: null, ivan: 0, ivanNow: false, ivanSaid: false, octSaid: false,
-      turn: 0, pings: 0, buoys: [], buoysLeft: 5, charges: 4, marks: [], log: [], over: null, contacts: 0, lastContact: null
+      turn: 0, pings: 0, buoys: [], buoysLeft: BUOYS, charges: CHARGES, marks: [], log: [], over: null, contacts: 0, lastContact: null
     };
     $('#overlay').hidden = true;
     $('#charge-label').textContent = tid === 'october' ? 'Hail' : 'Depth charge';
@@ -313,6 +331,7 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
     } else {
       log(`Intel: a ${T.cls.toLowerCase()} is heading west for the escape line. Sink it before it gets there.`, 'dim');
     }
+    if (ships.length) log(`Convoy of ${ships.length} ships sailing east along row ${lane + 1}. The sub will go after them. Keep them afloat.`, 'dim');
     setMode('ping');
     updateUI(); render();
   }
@@ -346,6 +365,8 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
       if (S.rocks.has(key(c.x, c.y)) || S.buoys.some(b => b.x === c.x && b.y === c.y)) return flash('A buoy can’t go there. Pick open water.');
     }
     if (kind === 'charge' && S.charges <= 0) return flash('Nothing left to fire.');
+    if (kind === 'charge' && S.ships.some(s => s.st === 'ok' && Math.abs(Math.round(s.x) - c.x) <= 1 && Math.abs(s.y - c.y) <= 1))
+      return flash('Check fire: a friendly ship is inside the blast area.');
 
     S.turn++;
     S.marks.forEach(m => m.age++);
@@ -365,7 +386,9 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
       log('Holding position. All buoys listening.', 'dim');
     }
 
+    moveConvoy();
     moveSub();
+    if (!S.over) runTorps();
     if (!S.over) listen();
     if (S.alert > 0) S.alert--;
     finish();
@@ -416,14 +439,77 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
     if (S.ivan === 0 && S.turn > 2 && rand() < 0.07) { S.ivan = 2; S.ivanSaid = false; }
     S.ivanNow = S.ivan > 0;
     sub.spd = S.alert > 0 ? T.sprint : T.cruise;
-    sub.acc += sub.spd;
+    S.atk = subTarget();
+    sub.acc += sub.spd * MOVE_SCALE; // bigger ocean, same noise: squares cover ground faster than the speed rating
     while (sub.acc >= 1 && !S.over) { sub.acc -= 1; step(); }
     if (S.ivan > 0) S.ivan--;
+    if (S.cool > 0) S.cool--;
+    else if (S.atk && !S.over && !S.ivanNow && S.subTorps > 0 && Math.hypot(S.atk.x - sub.x, S.atk.y - sub.y) <= ATTACK_R
+      && rand() < T.aggr * (S.alert > 0 ? 0.4 : 1)) launch(S.atk);
+  }
+
+  // ---------- convoy & torpedoes ----------
+  const shipsOnMap = () => S.ships.filter(s => s.st === 'ok' && s.x >= 0);
+
+  function moveConvoy() {
+    S.ships.forEach(s => {
+      if (s.st !== 'ok') return;
+      s.x += CONVOY_SPD;
+      if (s.x >= COLS - 0.5) { s.st = 'safe'; log(`${s.name} has cleared the area. Safe.`, 'phos'); }
+    });
+  }
+
+  function subTarget() {
+    if (S.subTorps <= 0) return null;
+    let best = null, bd = Infinity;
+    shipsOnMap().forEach(s => { const d = Math.hypot(s.x - S.sub.x, s.y - S.sub.y); if (d < bd) { bd = d; best = s; } });
+    return best && bd <= 14 ? best : null;
+  }
+
+  function launch(ship) {
+    const sub = S.sub;
+    S.subTorps--; S.cool = 2; S.fired = true;
+    const d = Math.hypot(ship.x - sub.x, ship.y - sub.y) || 1;
+    const t = { x: sub.x + (ship.x - sub.x) / d * 1.5, y: sub.y + (ship.y - sub.y) / d * 1.5, ship, run: 1.5, fresh: true };
+    t.trail = [[t.x, t.y]];
+    S.torps.push(t);
+    const trueAng = Math.atan2(sub.x - ship.x, -(sub.y - ship.y));
+    const ang = trueAng + gauss() * 6 * Math.PI / 180;
+    S.marks.push({ k: 'brg', x: ship.x, y: ship.y, ang, err: 8 * Math.PI / 180, age: 0, torp: true });
+    log(`${ship.name}: Torpedo in the water! Launch transient bearing ${deg(ang)}°.`, 'red');
+    tone(760, 0.14, 0.12, 0, 'square'); tone(760, 0.14, 0.12, 0.22, 'square');
+    contact();
+  }
+
+  function runTorps() {
+    S.torps.forEach(t => {
+      if (t.fresh) { t.fresh = false; return; }
+      const s = t.ship;
+      if (s.st !== 'ok') { t.dead = true; log(s.st === 'safe' ? 'A torpedo ran out of fuel and sank.' : 'A torpedo ran on through the wreckage and sank.', 'dim'); return; }
+      const d = Math.hypot(s.x - t.x, s.y - t.y);
+      if (d <= TORP_SPD) {
+        t.dead = true; t.x = s.x; t.y = s.y; t.trail.push([t.x, t.y]);
+        if (rand() < TORP_HIT) {
+          s.st = 'sunk';
+          anims.push({ k: 'boom', x: s.x, y: s.y, t0: performance.now() });
+          tone(70, 1.4, 0.45); tone(120, 0.8, 0.2, 0.1, 'triangle');
+          log(`${s.name} is hit and going down at ${gridName(s)}!`, 'red');
+        } else log(`Torpedo missed ${s.name}. It ran wide.`, 'amber');
+        return;
+      }
+      t.x += (s.x - t.x) / d * TORP_SPD; t.y += (s.y - t.y) / d * TORP_SPD; t.run += TORP_SPD;
+      t.trail.push([t.x, t.y]);
+      if (t.run > 16) { t.dead = true; log('A torpedo ran out of fuel and sank.', 'dim'); }
+    });
+    S.torps = S.torps.filter(t => !t.dead);
+    if (S.ships.length && S.ships.every(s => s.st === 'sunk')) end('lose', `Every ship in the convoy has been sunk. The ${S.hidden ? 'unknown contact' : S.T.name} slips away to the west.`, 'convoy');
   }
 
   function step() {
     const sub = S.sub;
-    const tgt = S.ivanNow ? { x: sub.x + 6, y: sub.y } : { x: -1, y: sub.ty };
+    const atk = !S.ivanNow && S.atk;
+    if (atk && Math.hypot(atk.x - sub.x, atk.y - sub.y) <= 2.5) return; // in firing position: hold and stay quiet
+    const tgt = S.ivanNow ? { x: sub.x + 6, y: sub.y } : atk ? { x: atk.x + 2, y: atk.y } : { x: -1, y: sub.ty };
     let best = null, bs = Infinity;
     for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) {
       if (!dx && !dy) continue;
@@ -453,6 +539,8 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
     const sub = S.sub;
     let L = S.T.noise * Math.pow(sub.spd, 1.5);
     if (S.ivanNow) L *= 1.6;
+    if (S.fired) L += 0.5;
+    S.fired = false;
     S.buoys.forEach(b => {
       const d = Math.hypot(sub.x - b.x, sub.y - b.y);
       if (d <= PASSIVE_R) {
@@ -478,9 +566,10 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
     });
   }
 
-  function end(result, reason) {
+  function end(result, reason, why) {
     const T = S.T, oct = S.tid === 'october';
     S.over = { result, reason };
+    const nShips = S.ships.length, safe = S.ships.filter(s => s.st !== 'sunk').length;
     const box = $('#overlayBox');
     box.innerHTML = '';
     const h = document.createElement('h3');
@@ -494,6 +583,7 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
         : `${S.hidden ? 'The unknown contact was a ' + T.name + ' (' + T.cls.toLowerCase() + '). ' : T.name + ' '}sunk at ${gridName(S.sub)} on turn ${S.turn}.`;
       if (S.pings === 1) lines.push(oct ? '“Re-verify our range to target. One ping only.” You found her with a single ping.' : 'One ping only: you won with a single active ping.');
       if (S.pings === 0) lines.push('Silent hunter: you won without a single active ping.');
+      if (nShips && safe === nShips) lines.push('Convoy intact: not a single ship lost.');
       log(oct ? 'Hail answered. Red October is ours.' : `Target destroyed. It was a ${T.name}.`, 'red');
       if (!oct && !unlocked) {
         unlocked = true; store('subhunt.october', '1'); buildMissions(true);
@@ -502,12 +592,12 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
       }
     } else {
       h.className = 'lose';
-      h.textContent = oct ? 'She slipped away' : 'Contact lost';
+      h.textContent = oct ? 'She slipped away' : why === 'convoy' ? 'Convoy lost' : 'Contact lost';
       p.textContent = reason || `${S.hidden ? 'The unknown contact, a ' + T.name + ',' : 'The ' + T.name} crossed the escape line on turn ${S.turn}.`;
-      log(oct ? 'Red October crossed the line. Ramius is gone.' : `The ${T.name} reached the escape line.`, 'red');
+      if (why !== 'convoy') log(oct ? 'Red October crossed the line. Ramius is gone.' : `The ${T.name} reached the escape line.`, 'red');
     }
     const meta = document.createElement('div'); meta.className = 'meta';
-    meta.textContent = `Turns ${S.turn} · Pings ${S.pings} · Buoys ${S.buoys.length} · Contacts ${S.contacts}`;
+    meta.textContent = `Turns ${S.turn} · Pings ${S.pings} · Buoys ${S.buoys.length} · Contacts ${S.contacts}${nShips ? ` · Ships saved ${safe}/${nShips}` : ''}`;
     const btn = document.createElement('button'); btn.className = 'small'; btn.textContent = 'Hunt again'; btn.id = 'again';
     btn.addEventListener('click', newGame);
     box.append(h, p);
@@ -530,6 +620,7 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
     $('#s-turn').textContent = S.turn;
     $('#s-pings').textContent = S.pings;
     $('#s-contacts').textContent = S.contacts;
+    $('#s-convoy').textContent = S.ships.length ? S.ships.filter(s => s.st !== 'sunk').length + '/' + S.ships.length : '–';
     $('#s-last').textContent = S.lastContact == null ? '–' : 'T' + S.lastContact;
     $('#n-buoy').textContent = S.buoysLeft;
     $('#n-charge').textContent = S.charges;
@@ -557,10 +648,10 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
   const cxp = x => px(x + 0.5), cyp = y => py(y + 0.5);
 
   function resize() {
-    const w = cv.clientWidth || 600;
-    cs = (w - LM - 2) / COLS;
-    const h = Math.round(TM + cs * ROWS + 2);
-    cv.style.height = h + 'px';
+    const avail = $('#mapscroll').clientWidth || 600;
+    cs = Math.max(MIN_CS, (avail - LM - 2) / COLS);
+    const w = Math.floor(LM + cs * COLS + 2), h = Math.round(TM + cs * ROWS + 2);
+    cv.style.width = w + 'px'; cv.style.height = h + 'px';
     const dpr = window.devicePixelRatio || 1;
     cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -587,9 +678,9 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
     ctx.stroke();
 
     // labels
-    ctx.fillStyle = C.muted; ctx.font = `500 ${Math.max(9, Math.min(11, cs * 0.45))}px ${getComputedStyle(document.body).getPropertyValue('--f-mono') || 'monospace'}`;
+    ctx.fillStyle = C.muted; ctx.font = `500 ${Math.max(8, Math.min(11, cs * 0.45))}px ${getComputedStyle(document.body).getPropertyValue('--f-mono') || 'monospace'}`;
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    for (let x = 0; x < COLS; x++) ctx.fillText(String.fromCharCode(65 + x), cxp(x), TM / 2);
+    for (let x = 0; x < COLS; x++) ctx.fillText(colName(x), cxp(x), TM / 2);
     ctx.textAlign = 'right';
     for (let y = 0; y < ROWS; y++) ctx.fillText(String(y + 1), LM - 5, cyp(y));
 
@@ -604,6 +695,21 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
     ctx.font = `600 ${Math.max(9, cs * 0.42)}px 'Chakra Petch', sans-serif`;
     ctx.fillText('ESCAPE LINE', 0, 0);
     ctx.restore();
+
+    // convoy route
+    if (S.ships.length) {
+      ctx.save();
+      ctx.strokeStyle = rgba(C.fg, 0.16); ctx.setLineDash([3, 7]); ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(px(0), cyp(S.lane)); ctx.lineTo(px(COLS), cyp(S.lane)); ctx.stroke();
+      ctx.setLineDash([]);
+      const ax = px(COLS) - 4, ay = cyp(S.lane);
+      ctx.fillStyle = rgba(C.fg, 0.3);
+      ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(ax - cs * 0.5, ay - cs * 0.3); ctx.lineTo(ax - cs * 0.5, ay + cs * 0.3); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = rgba(C.fg, 0.35); ctx.textAlign = 'right'; ctx.textBaseline = 'bottom';
+      ctx.font = `600 ${Math.max(9, cs * 0.42)}px 'Chakra Petch', sans-serif`;
+      ctx.fillText('CONVOY ROUTE', px(COLS) - cs * 0.7, py(S.lane) - 2);
+      ctx.restore();
+    }
 
     // rocks
     S.rocks.forEach(k => {
@@ -634,7 +740,7 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
         ctx.stroke(); ctx.setLineDash([]);
         ctx.fillStyle = rgba(C.muted, 0.8 * fade); ctx.beginPath(); ctx.arc(cx, cy, 2.5, 0, Math.PI * 2); ctx.fill();
       } else if (m.k === 'brg') {
-        const col = m.bio ? C.bio : C.phos;
+        const col = m.bio ? C.bio : m.torp ? C.red : C.phos;
         const a0 = m.ang - m.err - Math.PI / 2, a1 = m.ang + m.err - Math.PI / 2, R = PASSIVE_R * cs;
         ctx.fillStyle = rgba(col, (m.bio ? 0.08 : 0.16) * fade);
         ctx.beginPath(); ctx.moveTo(cx, cy); ctx.arc(cx, cy, R, a0, a1); ctx.closePath(); ctx.fill();
@@ -660,6 +766,35 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
       ctx.fillStyle = C.phos; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
       ctx.font = `500 ${Math.max(9, cs * 0.4)}px 'IBM Plex Mono', monospace`;
       ctx.fillText(b.id, cx + cs * 0.3, cy + cs * 0.15);
+    });
+
+    // convoy
+    S.ships.forEach(s => {
+      if (s.st === 'safe' || s.x < -0.5) return;
+      const X = cxp(s.x), Y = cyp(s.y), L = cs * 0.75, W = cs * 0.24;
+      ctx.font = `500 ${Math.max(8, cs * 0.36)}px 'IBM Plex Mono', monospace`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+      if (s.st === 'sunk') {
+        const r = cs * 0.28;
+        ctx.strokeStyle = rgba(C.red, 0.75); ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(X - r, Y - r); ctx.lineTo(X + r, Y + r); ctx.moveTo(X + r, Y - r); ctx.lineTo(X - r, Y + r); ctx.stroke();
+        ctx.fillStyle = rgba(C.red, 0.6); ctx.fillText(s.name.replace(/^\S+ /, ''), X, Y + cs * 0.4);
+        return;
+      }
+      ctx.fillStyle = C.fg;
+      ctx.beginPath();
+      ctx.moveTo(X + L, Y); ctx.lineTo(X + L * 0.45, Y - W); ctx.lineTo(X - L * 0.8, Y - W);
+      ctx.lineTo(X - L * 0.8, Y + W); ctx.lineTo(X + L * 0.45, Y + W); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = C.sea2; ctx.fillRect(X - L * 0.35, Y - W * 0.45, L * 0.45, W * 0.9);
+      ctx.fillStyle = rgba(C.fg, 0.7); ctx.fillText(s.name.replace(/^\S+ /, ''), X, Y + cs * 0.38);
+    });
+
+    // torpedoes
+    S.torps.forEach(t => {
+      ctx.strokeStyle = rgba(C.red, 0.85); ctx.lineWidth = 1.5; ctx.setLineDash([4, 3]);
+      ctx.beginPath(); t.trail.forEach(([x, y], i) => { const X = cxp(x), Y = cyp(y); i ? ctx.lineTo(X, Y) : ctx.moveTo(X, Y); }); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = C.red; ctx.beginPath(); ctx.arc(cxp(t.x), cyp(t.y), Math.max(3, cs * 0.16), 0, Math.PI * 2); ctx.fill();
     });
 
     // hover preview
@@ -704,6 +839,7 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
 
   function cellAt(e) {
     const r = cv.getBoundingClientRect();
+    if (!S) return null;
     const x = Math.floor((e.clientX - r.left - LM) / cs), y = Math.floor((e.clientY - r.top - TM) / cs);
     return x >= 0 && x < COLS && y >= 0 && y < ROWS ? { x, y } : null;
   }
