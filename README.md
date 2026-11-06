@@ -21,6 +21,15 @@ Press **4** or pick **Plot** to mark up the table yourself. It's free and doesn'
 ## Replay
 When a hunt ends, **Watch replay** plays it back turn by turn: the sub's course, every buoy drop, ping return, bearing, torpedo and depth charge, with that turn's events underneath. Scrub with the slider or pause.
 
+## Thermal layer
+A strong thermal layer splits the ocean into shallow and deep water. Set each buoy **shallow** or **deep** before dropping it (the toggle under the toolbar, or key **D**). Deep buoys are marked ↓.
+- Across the layer, passive buoys hear about a third as well, and active pings reach only 6 nmi (instead of 10) with a weaker echo. The sub's own hearing of your pings is cut across the layer too, from 24 nmi to 14.
+- Each sub has a side it prefers. When it's pinged from its own side, it may slip across the layer, and a nearby buoy may hear its **hull popping** as it changes depth. It also drifts across now and then.
+- Shallow buoys hear the convoy loudly; deep buoys hear it much less, which cuts the clutter on the waterfall.
+
+## Sea life
+A humpback whale, a sperm whale, a dolphin pod and snapping shrimp beds on the rocks all make noise. Each has its own sound, log description and waterfall texture: humpback song comes and goes in broad bands, the sperm whale clicks in a broken line down deep, dolphins flicker and move fast, and shrimp crackle in a wide steady smear. Whales can return a false echo on active buoys. With Jonesy on watch (type `jonesy`), he names them and their bearings are drawn in purple. The replay shows where each creature was.
+
 ## The convoy
 Four friendly merchant ships sail east along a marked route. The sub closes to within 8 nmi and fires torpedoes. Each launch is loud: the targeted ship reports a bearing, buoys hear it more easily, and the torpedo's run is shown, so you get one turn to answer. A sub that was just pinged or charged fires less often. You can't drop a depth charge on top of a friendly ship.
 
@@ -44,10 +53,10 @@ A win earns 1 star, 2 stars from 2,000 points and 3 stars from 2,600 (1,250 and 
 Five missions in a row (**Shakedown**, **Quiet Water**, **Fast Mover**, **Needle** and **Ghost**) drawing from one supply pool: 18 active buoys, 26 passive buoys and 18 depth charges. Each mission takes up to the normal loadout from the pool. Unused gear goes back afterwards, and each win adds +2 active, +3 passive and +2 charges. You can retry a failed mission, but what you spent is gone. If the pool runs out of charges, the campaign is over. Progress, the campaign score and your best campaign are saved in the browser. Starting a mission takes its gear from the pool straight away, so leaving mid-mission forfeits it.
 
 ## Subs
-| Sub | Size | Speed | Active | Passive | Torpedoes | Decoys |
-| --- | --- | --- | --- | --- | --- | --- |
-| Leviathan | Huge | Medium | Easy | Fair | 2 | 2 |
-| Whisper | Medium | Slow | Fair | Hard | 4 | 3 |
-| Barracuda | Small | Fast | Hard | Easy | 4 | 3 |
-| Minnow | Tiny | Very slow | Very hard | Very hard | 2 | 1 |
-| Red October (secret) | Huge | Medium | Easy | Very hard | 0 | 1 |
+| Sub | Size | Speed | Active | Passive | Torpedoes | Decoys | Prefers |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Leviathan | Huge | Medium | Easy | Fair | 2 | 2 | Deep |
+| Whisper | Medium | Slow | Fair | Hard | 4 | 3 | Shallow |
+| Barracuda | Small | Fast | Hard | Easy | 4 | 3 | Deep |
+| Minnow | Tiny | Very slow | Very hard | Very hard | 2 | 1 | Shallow |
+| Red October (secret) | Huge | Medium | Easy | Very hard | 0 | 1 | Deep |

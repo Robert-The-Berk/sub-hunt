@@ -65,8 +65,10 @@ canvas#map { display: block; border: 1px solid var(--line); border-radius: 6px; 
 .tool.buoy[aria-pressed="true"] { color: var(--phos); }
 .tool.charge[aria-pressed="true"] { color: var(--red); }
 .tool.plot[aria-pressed="true"] { color: var(--pencil); }
-.plotbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 13px; color: var(--muted); }
-.plotbar .hint { flex: 1; min-width: 200px; }
+.plotbar, .depthbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 13px; color: var(--muted); }
+.plotbar .hint, .depthbar .hint { flex: 1; min-width: 200px; }
+.depthbar .seg { min-width: 180px; }
+.depthbar .hint b { color: var(--fg); font-weight: 600; }
 .plotbar .hint b { color: var(--pencil); font-weight: 600; }
 .tool .k { font-family: var(--f-mono); font-size: 11px; color: var(--muted); border: 1px solid var(--line); border-radius: 3px; padding: 0 4px; }
 .tool .n { font-family: var(--f-mono); font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
@@ -181,6 +183,13 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
         <button class="tool" id="wait"><span class="k">W</span>Wait and listen</button>
         <button class="tool" id="mute" aria-pressed="false" title="Sound on or off">Sound on</button>
       </div>
+      <div class="depthbar" id="depthbar">
+        <div class="seg" role="group" aria-label="Buoy depth">
+          <button id="dep-shallow" aria-pressed="true">Shallow</button>
+          <button id="dep-deep" aria-pressed="false">Deep ↓</button>
+        </div>
+        <span class="hint"><b>Buoy depth</b> (key D): a buoy hears and pings best on its own side of the thermal layer. Deep buoys hear less of the convoy.</span>
+      </div>
       <div class="plotbar" id="plotbar" hidden>
         <span class="hint"><b>Plot pencil</b> (free, no turn used): click a square to mark a guess, click it again to erase. Drag to draw a course line.</span>
         <button class="small" id="plot-undo">Undo</button>
@@ -233,6 +242,7 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
           <dt>Active sonar</dt><dd id="d-active"></dd>
           <dt>Passive sonar</dt><dd id="d-passive"></dd>
           <dt>Decoys</dt><dd id="d-decoys"></dd>
+          <dt>Prefers</dt><dd id="d-depth"></dd>
         </dl>
       </div>
 
@@ -267,6 +277,8 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
             <li><b>The sub hears pings much further away</b> than you can hear echoes: out to 24 nmi (12 squares, the faint outer ring when you aim). When it hears one it speeds up and steers to stay out of that buoy's range, so drop them where it has to go, not where it is.</li>
             <li><b>No return</b> doesn't prove the sub isn't there. A small sub can sit inside the circle and still not echo.</li>
             <li><b>Sonobuoys</b> (teal) listen silently every turn up to 16 nmi away and report a bearing, not a range. Fast subs are loud; slow ones are hard to hear.</li>
+            <li><b>Thermal layer</b>: the ocean has a layer that bends sound. Each buoy is set shallow or deep (key D). Across the layer, passive buoys hear only about a third as well, and active pings reach only 6 nmi with a weaker echo. The sub picks a side and may slip across the layer when it is pinged, and a nearby buoy may hear its hull pop as it changes depth. Shallow buoys hear the convoy loudly; deep ones much less.</li>
+            <li><b>Sea life</b>: whales, dolphins and snapping shrimp make noise too. Each sounds different in the log and looks different on the waterfall: whale song comes and goes in broad bands, dolphins flicker and move fast, shrimp crackle steadily near rocks, and a sperm whale clicks in a broken line. Whales can even return an echo. With Jonesy on watch, he names them.</li>
             <li><b>Decoys</b>: when a ping catches it or a charge lands close, the sub may drop a noisemaker and creep away deep and slow. A decoy echoes like a hull, but passive buoys hear broadband noise with no blade rate, its waterfall trace is broad and smeared, and it barely moves. A short mechanical transient on a buoy can mean one was just launched.</li>
             <li><b>Sonar waterfall</b>: shows what one passive buoy hears, bearing across and time going down. A steady line is something making noise. It shows the sub even when it is too faint for a logged contact, so look for a weak line that keeps the same bearing turn after turn. Small marks at the top show where the friendly ships are. Click a line to plot that bearing on the map.</li>
             <li><b>Depth charges</b> (red) hit a 3×3 area where the sub is now, before it moves. You can't drop one on top of a friendly ship.</li>
@@ -290,24 +302,25 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
   const BUOYS = 8, ACTIVE_BUOYS = 6, ACTIVE_LIFE = 4, COUNTER_R = 12, CHARGES = 6, ATTACK_R = 4, TORP_SPD = 3, TORP_HIT = 0.7, CONVOY_SPD = 0.8, MOVE_SCALE = 1.5, CONVOY_N = 4, MIN_CS = 15;
   const SHIP_NAMES = ['MV Aurora', 'MV Kestrel', 'SS Halcyon', 'MV Northern Star', 'MV Saltire', 'SS Meridian', 'MV Bluebell', 'MV Cormorant'];
   const LM = 24, TM = 18;
+  const LAYER_X = 0.35, ACTIVE_X = 3, COUNTER_X = 7, DEEP_SHIP = 0.4;
   const DECOY_LIFE = 5, DECOY_NOISE = 0.7, DECOY_ECHO = 0.85, CREEP = 3;
   const WF_BINS = 90, WF_LINES = 4, WF_KEEP = 2400, WF_SHIP_R = 14;
 
   const TYPES = {
     leviathan: { name: 'Leviathan', cls: 'Ballistic missile submarine', size: 'Huge', sizeN: 4, speedLabel: 'Medium',
-      cruise: 0.55, sprint: 0.85, noise: 1.0, activeP: 0.95, torps: 2, aggr: 0.3, decoys: 2,
+      cruise: 0.55, sprint: 0.85, noise: 1.0, activeP: 0.95, torps: 2, aggr: 0.3, decoys: 2, deep: true,
       blurb: 'A giant missile boat. It echoes like a cathedral on active sonar, and it is loud enough to hear when it hurries.' },
     whisper: { name: 'Whisper', cls: 'Diesel-electric attack boat', size: 'Medium', sizeN: 3, speedLabel: 'Slow',
-      cruise: 0.45, sprint: 0.8, noise: 0.85, activeP: 0.75, torps: 4, aggr: 0.5, decoys: 3,
+      cruise: 0.45, sprint: 0.8, noise: 0.85, activeP: 0.75, torps: 4, aggr: 0.5, decoys: 3, deep: false,
       blurb: 'Running on batteries it is almost silent. Pings will usually find it; buoys will struggle.' },
     barracuda: { name: 'Barracuda', cls: 'Fast attack submarine', size: 'Small', sizeN: 2, speedLabel: 'Fast',
-      cruise: 1.0, sprint: 1.4, noise: 1.0, activeP: 0.5, torps: 4, aggr: 0.6, decoys: 3,
+      cruise: 1.0, sprint: 1.4, noise: 1.0, activeP: 0.5, torps: 4, aggr: 0.6, decoys: 3, deep: true,
       blurb: 'Small and quick. Its screws scream on passive sonar, but its hull often slips past a ping.' },
     minnow: { name: 'Minnow', cls: 'Midget submarine', size: 'Tiny', sizeN: 1, speedLabel: 'Very slow',
-      cruise: 0.35, sprint: 0.6, noise: 0.8, activeP: 0.3, torps: 2, aggr: 0.45, decoys: 1,
+      cruise: 0.35, sprint: 0.6, noise: 0.8, activeP: 0.3, torps: 2, aggr: 0.45, decoys: 1, deep: false,
       blurb: 'Tiny and patient. Hard to hear, hard to echo. It takes a long time to reach the line, so you will need that time.' },
     october: { name: 'Red October', cls: 'Typhoon-class, caterpillar drive', size: 'Huge', sizeN: 4, speedLabel: 'Medium',
-      cruise: 0.6, sprint: 0.8, noise: 0.1, activeP: 0.95, torps: 0, aggr: 0, decoys: 1, secret: true,
+      cruise: 0.6, sprint: 0.8, noise: 0.1, activeP: 0.95, torps: 0, aggr: 0, decoys: 1, deep: true, secret: true,
       blurb: 'Captain Marko Ramius is running west. The caterpillar drive makes her nearly silent. Moscow wants her sunk. Find her first and hail her.' }
   };
   const CAMPAIGN = [
@@ -333,7 +346,7 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
 
   function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { return null; } }
   let unlocked = store('subhunt.october') === '1';
-  let wfSel = null, wfHover = null, drag = null;
+  let wfSel = null, wfHover = null, drag = null, buoyDeep = false;
   let playMode = 'quick', camp = loadCamp(), resetArm = 0;
   function loadCamp() { try { const c = JSON.parse(store('subhunt.campaign') || 'null'); if (c && c.pool) return c; } catch (e) { /* bad save */ } return null; }
   function saveCamp() { store('subhunt.campaign', camp ? JSON.stringify(camp) : ''); }
@@ -382,6 +395,21 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
     } catch (e) { /* audio unavailable */ }
   }
 
+  function sweep(f0, f1, dur, vol, delay = 0, type = 'sine') {
+    if (muted) return;
+    try {
+      actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+      const t = actx.currentTime + delay;
+      const o = actx.createOscillator(), g = actx.createGain();
+      o.type = type; o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f1, t + dur);
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(vol, t + Math.min(0.15, dur / 3));
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o.connect(g).connect(actx.destination);
+      o.start(t); o.stop(t + dur + 0.05);
+    } catch (e) { /* audio unavailable */ }
+  }
+
   // ---------- setup ----------
   function genRocks(lane) {
     const rocks = new Set();
@@ -417,7 +445,8 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
     do { sx = COLS - 2 - Math.floor(rand() * 4); sy = 1 + Math.floor(rand() * (ROWS - 2)); } while (rocks.has(key(sx, sy)));
     S = {
       T, tid, hidden, rocks, label, lane, ships, torps: [], subTorps: T.torps, decoys: [], subDecoys: T.decoys, decoysUsed: 0, decoyCool: 0, decoyNew: null, creep: 0, cool: 0, atk: null, fired: false,
-      sub: { x: sx, y: sy, ty: 2 + Math.floor(rand() * (ROWS - 4)), acc: 0, spd: T.cruise },
+      sub: { x: sx, y: sy, ty: 2 + Math.floor(rand() * (ROWS - 4)), acc: 0, spd: T.cruise, deep: T.deep },
+      layerCool: 0, crossed: false, critters: genCritters(rocks, label),
       trail: [[sx, sy]], alert: 0, noise: null, ivan: 0, ivanNow: false, ivanSaid: false, octSaid: false,
       turn: 0, pings: 0, actives: 0, activeLeft: load.a, heard: [], buoys: [], buoysLeft: load.p, charges: load.c, load, camp: cfg.camp == null ? null : cfg.camp, decoyHits: 0, mission, marks: [], allMarks: [], hist: [], plot: [], log: [], over: null, contacts: 0, lastContact: null
     };
@@ -437,6 +466,7 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
     } else {
       log(`Intel: a ${T.cls.toLowerCase()} is heading west for the escape line. Sink it before it gets there.`, 'dim');
     }
+    log('Bathy: strong thermal layer today. Set each buoy shallow or deep; a sub on the far side of the layer is much harder to hear or ping.', 'dim');
     if (ships.length) log(`Convoy of ${ships.length} ships sailing east along row ${lane + 1}. The sub will go after them. Keep them afloat.`, 'dim');
     setMode('ping');
     snapshot();
@@ -483,10 +513,10 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
     if (kind === 'ping') dropActive(c);
     else if (kind === 'buoy') {
       const id = 'B' + (S.buoys.filter(b => b.kind === 'passive').length + 1);
-      S.buoys.push({ x: c.x, y: c.y, id, kind: 'passive', born: S.turn, wf: [] });
+      S.buoys.push({ x: c.x, y: c.y, id, kind: 'passive', born: S.turn, wf: [], deep: buoyDeep });
       wfSel = id;
       S.buoysLeft--;
-      log(`Sonobuoy ${id} in the water at ${gridName(c)}.`, 'phos');
+      log(`Passive buoy ${id} in the water at ${gridName(c)}, set ${buoyDeep ? 'deep' : 'shallow'}.`, 'phos');
       tone(520, 0.25, 0.08);
     } else if (kind === 'charge') {
       if (doCharge(c)) { finish(); return; }
@@ -498,6 +528,7 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
     moveConvoy();
     moveSub();
     moveDecoys();
+    moveCritters();
     if (!S.over) runTorps();
     if (!S.over) { listen(); pingAll(); }
     if (S.alert > 0) S.alert--;
@@ -511,10 +542,14 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
       sub: [S.sub.x, S.sub.y],
       ships: S.ships.map(s => ({ name: s.name, x: s.x, y: s.y, st: s.st })),
       torps: S.torps.map(t => ({ x: t.x, y: t.y, trail: t.trail.slice() })),
-      decoys: S.decoys.map(d => ({ x: d.x, y: d.y }))
+      decoys: S.decoys.map(d => ({ x: d.x, y: d.y })),
+      deep: S.sub.deep,
+      critters: S.critters.map(c => ({ k: c.k, name: c.name, x: c.x, y: c.y, vocal: c.vocal }))
     };
   }
   const activeLast = b => b.born + ACTIVE_LIFE - 1;
+  const same = (b, deep) => !!b.deep === !!deep;
+  const tag = b => b.id + (b.deep ? '↓' : '');
   const pinging = (b, t) => b.kind === 'active' && t >= b.born && t <= activeLast(b);
 
   function contact() { S.contacts++; S.lastContact = S.turn; }
@@ -522,8 +557,8 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
   function dropActive(c) {
     S.actives++; S.activeLeft--;
     const id = 'A' + S.actives;
-    S.buoys.push({ x: c.x, y: c.y, id, kind: 'active', born: S.turn });
-    log(`Active buoy ${id} in the water at ${gridName(c)}. Pinging for ${ACTIVE_LIFE} turns.`, 'amber');
+    S.buoys.push({ x: c.x, y: c.y, id, kind: 'active', born: S.turn, deep: buoyDeep });
+    log(`Active buoy ${id} in the water at ${gridName(c)}, set ${buoyDeep ? 'deep' : 'shallow'}. Pinging for ${ACTIVE_LIFE} turns.`, 'amber');
     if (S.actives === 1 && S.tid === 'october') log('Jonesy: Every ping carries a long way, Captain. She will hear it well before we hear her.', 'quote');
   }
 
@@ -538,7 +573,8 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
       S.pings++;
       const d = Math.hypot(sub.x - b.x, sub.y - b.y);
       anims.push({ k: 'ping', x: b.x, y: b.y, t0: performance.now() });
-      if (d <= ACTIVE_R && rand() < T.activeP) {
+      const sl = same(b, sub.deep);
+      if (d <= (sl ? ACTIVE_R : ACTIVE_X) && rand() < T.activeP * (sl ? 1 : 0.6)) {
         const r = Math.round(d);
         addMark({ k: 'ret', x: b.x, y: b.y, r });
         const echo = ['', 'very faint echo', 'small echo', 'solid echo', 'big, hard echo'][T.sizeN];
@@ -548,7 +584,8 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
       } else quiet.push(b.id);
       S.decoys.forEach(q => {
         const dq = Math.hypot(q.x - b.x, q.y - b.y);
-        if (dq <= ACTIVE_R && rand() < DECOY_ECHO) {
+        const sq = same(b, q.deep);
+        if (dq <= (sq ? ACTIVE_R : ACTIVE_X) && rand() < DECOY_ECHO * (sq ? 1 : 0.6)) {
           const r = Math.round(dq);
           addMark({ k: 'ret', x: b.x, y: b.y, r });
           const echo = ['', 'very faint echo', 'small echo', 'solid echo', 'big, hard echo'][T.sizeN];
@@ -556,7 +593,17 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
           contact();
         }
       });
-      if (d <= COUNTER_R) S.heard.push({ x: b.x + gauss() * 1.5, y: b.y + gauss() * 1.5, d }); // the sub's fix on the buoy is rough
+      S.critters.forEach(cr => {
+        if (!cr.echo) return;
+        const dc = Math.hypot(cr.x - b.x, cr.y - b.y), sc = same(b, cr.deep);
+        if (dc <= (sc ? ACTIVE_R : ACTIVE_X) && rand() < cr.echo * (sc ? 1 : 0.5)) {
+          const r = Math.round(dc);
+          addMark({ k: 'ret', x: b.x, y: b.y, r });
+          log(`${b.id}: return at range ${r * NM} nmi, ${cr.echoTxt}.`, 'amber');
+          contact();
+        }
+      });
+      if (d <= (sl ? COUNTER_R : COUNTER_X)) S.heard.push({ x: b.x + gauss() * 1.5, y: b.y + gauss() * 1.5, d }); // the sub's fix on the buoy is rough
       if (S.turn === activeLast(b)) log(`${b.id} has used its last ping and gone quiet.`, 'dim');
     });
     if (quiet.length) log(`${quiet.join(', ')}: pinging, no return.`, 'dim');
@@ -566,6 +613,9 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
       const n = S.heard.reduce((a, h) => h.d < a.d ? h : a);
       S.noise = { x: n.x, y: n.y };
       if (n.d <= ACTIVE_R + 1 && rand() < 0.6) launchDecoy();
+      // slip across the layer, away from the side the pings are on
+      const nb = live.reduce((a, b) => Math.hypot(b.x - sub.x, b.y - sub.y) < Math.hypot(a.x - sub.x, a.y - sub.y) ? b : a);
+      if (same(nb, sub.deep) && S.layerCool <= 0 && rand() < 0.5) crossLayer();
     }
   }
 
@@ -576,9 +626,13 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
     if (S.subDecoys <= 0 || S.decoyCool > 0 || S.over) return;
     const sub = S.sub;
     S.subDecoys--; S.decoysUsed++; S.decoyCool = 4; S.creep = CREEP;
-    const q = { x: sub.x, y: sub.y, dx: gauss() * 0.2, dy: gauss() * 0.2, left: DECOY_LIFE, said: false };
+    const q = { x: sub.x, y: sub.y, dx: gauss() * 0.2, dy: gauss() * 0.2, left: DECOY_LIFE, said: false, deep: sub.deep };
     S.decoys.push(q);
     S.decoyNew = q;
+  }
+  function crossLayer() {
+    if (S.layerCool > 0 || S.over) return;
+    S.sub.deep = !S.sub.deep; S.layerCool = 5; S.crossed = true;
   }
   function moveDecoys() {
     S.decoys.forEach(q => {
@@ -606,6 +660,7 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
       return false;
     }
     if (near && rand() < 0.7) launchDecoy();
+    if (near && rand() < 0.4) crossLayer();
     if (oct) log(near ? `Hail at ${gridName(c)}: no answer, but sonar hears something close.` : `Hail at ${gridName(c)}: no answer.`, 'red');
     else log(near ? `Charge at ${gridName(c)}: near miss. Hull popping noises close by.` : `Charge at ${gridName(c)}: miss.`, 'red');
     S.alert = 4; S.noise = { x: c.x, y: c.y };
@@ -624,6 +679,8 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
     if (S.ivan > 0) S.ivan--;
     if (S.creep > 0) S.creep--;
     if (S.decoyCool > 0) S.decoyCool--;
+    if (S.layerCool > 0) S.layerCool--;
+    else if (rand() < 0.02) crossLayer();
     if (S.cool > 0) S.cool--;
     else if (S.atk && !S.over && !S.ivanNow && S.subTorps > 0 && Math.hypot(S.atk.x - sub.x, S.atk.y - sub.y) <= ATTACK_R
       && rand() < T.aggr * (S.alert > 0 ? 0.4 : 1)) launch(S.atk);
@@ -727,11 +784,13 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
     if (S.creep > 0) L *= 0.6; // deep and slow
     S.fired = false;
     const fresh = S.decoyNew; S.decoyNew = null;
+    const crossed = S.crossed; S.crossed = false;
     S.buoys.forEach(b => {
       if (b.kind !== 'passive') return;
-      const d = Math.hypot(sub.x - b.x, sub.y - b.y);
+      const d = Math.hypot(sub.x - b.x, sub.y - b.y), lf = same(b, sub.deep) ? 1 : LAYER_X;
+      if (crossed && d <= PASSIVE_R && rand() < 0.55) log(`${b.id}: hull popping, bearing ${deg(brgTo(b, sub.x, sub.y))}°. Contact may be changing depth.`, 'phos');
       if (d <= PASSIVE_R) {
-        const p = Math.min(0.95, L * (1 - d / PASSIVE_R) * (jonesy ? 1.3 : 1) + (d < 1 ? 0.3 : 0));
+        const p = Math.min(0.95, L * lf * (1 - d / PASSIVE_R) * (jonesy ? 1.3 : 1) + (d < 1 ? 0.3 : 0));
         if (rand() < p) {
           const trueAng = Math.atan2(sub.x - b.x, -(sub.y - b.y));
           const errDeg = (4 + 14 * (1 - p)) * (jonesy ? 0.5 : 1);
@@ -752,7 +811,7 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
       S.decoys.forEach(q => {
         const dq = Math.hypot(q.x - b.x, q.y - b.y);
         if (dq > PASSIVE_R) return;
-        const pq = Math.min(0.9, DECOY_NOISE * (1 - dq / PASSIVE_R) * (jonesy ? 1.3 : 1));
+        const pq = Math.min(0.9, DECOY_NOISE * (same(b, q.deep) ? 1 : LAYER_X) * (1 - dq / PASSIVE_R) * (jonesy ? 1.3 : 1));
         if (rand() >= pq) return;
         const errDeg = (6 + 14 * (1 - pq)) * (jonesy ? 0.5 : 1);
         const ang = brgTo(b, q.x, q.y) + gauss() * errDeg * Math.PI / 180;
@@ -762,42 +821,100 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
         contact();
         if (jonesy && !q.said) { q.said = true; log('Jonesy: That’s a noisemaker, Captain. All hiss, no blade rate. She’s slipped off somewhere quiet.', 'quote'); }
       });
-      let bioAng = null;
-      if (rand() < 0.035) {
-        const ang = rand() * Math.PI * 2;
-        bioAng = ang;
-        addMark({ k: 'brg', x: b.x, y: b.y, ang, err: 0.3, bio: true });
-        log(`${b.id}: faint contact bearing ${deg(ang)}°. Jonesy: biologics. Probably whales.`, 'bio');
-      }
-      waterfall(b, L, bioAng);
+      let bioSound = null;
+      S.critters.forEach(cr => {
+        if (!cr.vocal) return;
+        const dc = Math.hypot(cr.x - b.x, cr.y - b.y);
+        if (dc > cr.range) return;
+        const pc = cr.loud * (same(b, cr.deep) ? 1 : LAYER_X) * (1 - dc / cr.range) * (jonesy ? 1.3 : 1);
+        b.bioLast = b.bioLast || {};
+        if (S.turn - (b.bioLast[cr.id] ?? -99) < cr.gap || rand() >= pc * 0.6) return;
+        b.bioLast[cr.id] = S.turn;
+        const errDeg = 8 + 14 * (1 - Math.min(1, pc));
+        const ang = brgTo(b, cr.x, cr.y) + gauss() * errDeg * Math.PI / 180;
+        addMark({ k: 'brg', x: b.x, y: b.y, ang, err: errDeg * 1.6 * Math.PI / 180, bio: jonesy });
+        log(`${b.id}: contact bearing ${deg(ang)}°, ${pc > 0.6 ? 'strong' : pc > 0.3 ? 'moderate' : 'weak'}. ${cr.desc}${jonesy ? ' Jonesy: biologics. ' + cr.jonesy : ''}`, jonesy ? 'bio' : 'phos');
+        contact();
+        bioSound = bioSound || cr.k;
+      });
+      if (bioSound) critterSound(bioSound);
+      waterfall(b, L);
     });
+  }
+
+  // ---------- sea life ----------
+  const CRITTERS = {
+    whale: { name: 'humpback', range: 11, loud: 0.75, speed: 0.3, deep: false, echo: 0.3, echoTxt: 'solid echo', gap: 4, w: 1.8, steady: 0.75, jit: 3,
+      desc: 'Irregular low moans and long tonal sweeps.', jonesy: 'Humpback singing. She’s got a lot to say.' },
+    sperm: { name: 'sperm whale', range: 9, loud: 0.6, speed: 0.2, deep: true, echo: 0.3, echoTxt: 'solid echo', gap: 5, w: 0.6, steady: 0.45, jit: 1,
+      desc: 'Slow, regular clicks, like someone knocking on the hull.', jonesy: 'Sperm whale, hunting squid down deep.' },
+    dolphins: { name: 'dolphin pod', range: 6, loud: 0.65, speed: 1.1, deep: false, echo: 0, gap: 4, w: 0.8, steady: 0.35, jit: 9,
+      desc: 'Rapid clicks and whistles, moving fast.', jonesy: 'Dolphins. Just playing.' },
+    shrimp: { name: 'snapping shrimp', range: 5, loud: 0.5, speed: 0, deep: false, echo: 0, gap: 10, w: 3.2, steady: 1, jit: 2,
+      desc: 'Constant crackling, like fat in a frying pan.', jonesy: 'Snapping shrimp on the rocks. Ignore it.' }
+  };
+  function genCritters(rocks, label) {
+    const list = [], spot = () => ({ x: 4 + rand() * (COLS - 8), y: 1 + rand() * (ROWS - 2) });
+    const add = (k, at) => { const c = Object.assign({ k, id: k + list.length }, CRITTERS[k], at); const a = rand() * Math.PI * 2; c.dx = Math.cos(a) * c.speed; c.dy = Math.sin(a) * c.speed; c.vocal = false; c.sing = rand() < 0.5; list.push(c); };
+    add('whale', spot()); add('sperm', spot()); add('dolphins', spot());
+    add('shrimp', { x: label.x, y: label.y + 1 });
+    const rk = [...rocks].map(k => k.split(',').map(Number)).filter(([x, y]) => Math.abs(x - label.x) > 4)[0];
+    if (rk) add('shrimp', { x: rk[0], y: rk[1] });
+    return list;
+  }
+  function moveCritters() {
+    S.critters.forEach(c => {
+      if (c.speed) {
+        if (c.k === 'dolphins' && rand() < 0.3) { const a = Math.atan2(c.dy, c.dx) + gauss() * 0.8; c.dx = Math.cos(a) * c.speed; c.dy = Math.sin(a) * c.speed; }
+        c.x += c.dx; c.y += c.dy;
+        if (c.x < 1 || c.x > COLS - 2) { c.dx = -c.dx; c.x = Math.max(1, Math.min(COLS - 2, c.x)); }
+        if (c.y < 0.5 || c.y > ROWS - 1.5) { c.dy = -c.dy; c.y = Math.max(0.5, Math.min(ROWS - 1.5, c.y)); }
+      }
+      if (c.k === 'whale') { if (c.sing ? rand() < 0.15 : rand() < 0.12) c.sing = !c.sing; c.vocal = c.sing; }
+      else if (c.k === 'sperm') { if (c.deep ? rand() < 0.08 : rand() < 0.35) c.deep = !c.deep; c.vocal = c.deep && rand() < 0.8; }
+      else if (c.k === 'dolphins') c.vocal = rand() < 0.6;
+      else c.vocal = true;
+    });
+  }
+  function critterSound(k) {
+    if (k === 'whale') { sweep(260, 140, 1.4, 0.07); sweep(180, 320, 0.9, 0.05, 1.2); }
+    else if (k === 'sperm') { for (let i = 0; i < 5; i++) tone(1800, 0.02, 0.06, i * 0.32, 'square'); }
+    else if (k === 'dolphins') { for (let i = 0; i < 4; i++) sweep(3800 + rand() * 1500, 6500 + rand() * 2000, 0.12, 0.03, i * 0.14); for (let i = 0; i < 8; i++) tone(5000, 0.01, 0.03, 0.6 + i * 0.04, 'square'); }
+    else { for (let i = 0; i < 14; i++) tone(2500 + rand() * 3000, 0.008, 0.02, rand() * 0.8, 'square'); }
   }
 
   // ---------- waterfall ----------
   // One row per line; WF_LINES lines per turn. The sub's trace scales with the same received level
   // the detector uses, so a quiet boat can show as a faint, broken line well before a logged contact.
   const brgTo = (b, x, y) => { let a = Math.atan2(x - b.x, -(y - b.y)); if (a < 0) a += Math.PI * 2; return a; };
-  function waterfall(b, L, bioAng) {
+  function waterfall(b, L) {
     const sub = S.sub, src = [];
     const ds = Math.hypot(sub.x - b.x, sub.y - b.y);
     if (ds <= PASSIVE_R) {
-      const lvl = L * (1 - ds / PASSIVE_R) * (jonesy ? 1.3 : 1) + (ds < 1 ? 0.3 : 0);
+      const lvl = L * (same(b, sub.deep) ? 1 : LAYER_X) * (1 - ds / PASSIVE_R) * (jonesy ? 1.3 : 1) + (ds < 1 ? 0.3 : 0);
       src.push({ a: brgTo(b, sub.x, sub.y), amp: Math.min(1, 0.1 + lvl * 2.4), w: jonesy ? 0.6 : 0.9, steady: Math.min(1, 0.45 + lvl * 2), jit: jonesy ? 1 : 2 });
     }
     S.ships.forEach(s => {
       if (s.st !== 'ok' || s.x < 0) return;
       const d = Math.hypot(s.x - b.x, s.y - b.y);
-      if (d <= WF_SHIP_R) src.push({ a: brgTo(b, s.x, s.y), amp: 0.12 + 0.5 * (1 - d / WF_SHIP_R), w: 1.2, steady: 0.95, jit: 1 });
+      if (d <= WF_SHIP_R) src.push({ a: brgTo(b, s.x, s.y), amp: (0.12 + 0.5 * (1 - d / WF_SHIP_R)) * (b.deep ? DEEP_SHIP : 1), w: 1.2, steady: 0.95, jit: 1 });
     });
     S.decoys.forEach(q => {
       const d = Math.hypot(q.x - b.x, q.y - b.y);
-      if (d <= PASSIVE_R) src.push({ a: brgTo(b, q.x, q.y), amp: 0.3 + 0.45 * (1 - d / PASSIVE_R), w: 2.2, steady: 0.85, jit: 4 });
+      if (d <= PASSIVE_R) src.push({ a: brgTo(b, q.x, q.y), amp: (0.3 + 0.45 * (1 - d / PASSIVE_R)) * (same(b, q.deep) ? 1 : LAYER_X * 1.5), w: 2.2, steady: 0.85, jit: 4 });
     });
     S.torps.forEach(t => {
       const d = Math.hypot(t.x - b.x, t.y - b.y);
       if (d <= WF_SHIP_R) src.push({ a: brgTo(b, t.x, t.y), amp: 1, w: 0.8, steady: 1, jit: 1 });
     });
-    if (bioAng != null) src.push({ a: (bioAng + Math.PI * 4) % (Math.PI * 2), amp: 0.35, w: 2.5, steady: 0.6, jit: 6 });
+    S.critters.forEach(c => {
+      if (!c.vocal) return;
+      const d = Math.hypot(c.x - b.x, c.y - b.y);
+      if (d > c.range) return;
+      const amp = (0.12 + c.loud * 0.7 * (1 - d / c.range)) * (same(b, c.deep) ? 1 : LAYER_X * 1.5);
+      if (c.k === 'whale' && rand() < 0.4) return; // song comes in phrases
+      src.push({ a: brgTo(b, c.x, c.y), amp, w: c.w, steady: c.steady, jit: c.jit, bands: c.k === 'whale' });
+    });
     for (let l = 0; l < WF_LINES; l++) {
       const row = new Float32Array(WF_BINS);
       for (let i = 0; i < WF_BINS; i++) row[i] = 0.04 + 0.18 * rand() * rand();
@@ -830,7 +947,7 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
     box.innerHTML = '';
     if (!pas.length) { const p = document.createElement('p'); p.className = 'wf-hint'; p.textContent = 'Drop a passive buoy to start listening.'; box.append(p); return; }
     pas.forEach(b => {
-      const t = document.createElement('button'); t.className = 'wf-tab'; t.textContent = b.id;
+      const t = document.createElement('button'); t.className = 'wf-tab'; t.textContent = tag(b);
       t.setAttribute('aria-pressed', String(b.id === wfSel));
       t.addEventListener('click', () => { wfSel = b.id; wfHover = null; drawWF(); render(); });
       box.append(t);
@@ -900,7 +1017,7 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
   wfc.addEventListener('pointermove', e => {
     const b = wfBuoy(); if (!b) return;
     wfHover = { id: b.id, ang: wfAngAt(e) };
-    $('#wf-read').textContent = `${b.id} bearing ${deg(wfHover.ang)}°${S.over || RP ? '' : ' · click to plot'}`;
+    $('#wf-read').textContent = `${tag(b)} bearing ${deg(wfHover.ang)}°${S.over || RP ? '' : ' · click to plot'}`;
     drawWF(); render();
   });
   wfc.addEventListener('pointerleave', () => { wfHover = null; $('#wf-read').textContent = 'Bearing across, newest at the top. Click a trace to plot it.'; drawWF(); render(); });
@@ -1086,6 +1203,7 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
     $('#d-active').innerHTML = hid ? '???' : `${pips(activeLvl(T), 'amber')} ${LVL[activeLvl(T)]}`;
     $('#d-passive').innerHTML = hid ? '???' : `${pips(passiveLvl(T), 'phos')} ${LVL[passiveLvl(T)]}`;
     $('#d-decoys').textContent = hid ? '???' : T.decoys;
+    $('#d-depth').textContent = hid ? '???' : T.deep ? 'Below the layer' : 'Above the layer';
     $('#s-turn').textContent = S.turn;
     $('#s-pings').textContent = S.pings;
     $('#s-contacts').textContent = S.contacts;
@@ -1097,10 +1215,16 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
     renderLog();
     drawWF();
   }
+  function setDepth(deep) {
+    buoyDeep = deep;
+    $('#dep-shallow').setAttribute('aria-pressed', String(!deep));
+    $('#dep-deep').setAttribute('aria-pressed', String(deep));
+  }
   function setMode(m) {
     mode = m;
     ['ping', 'buoy', 'charge', 'plot'].forEach(k => $('#m-' + k).setAttribute('aria-pressed', String(k === m)));
     $('#plotbar').hidden = m !== 'plot';
+    $('#depthbar').hidden = !(m === 'ping' || m === 'buoy');
     cv.style.touchAction = m === 'plot' ? 'none' : 'manipulation';
     render();
   }
@@ -1135,7 +1259,7 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
   function replayView(t) {
     const h = S.hist[t] || S.hist[S.hist.length - 1];
     return Object.assign({}, S, {
-      turn: t, replaying: t < S.turn, sub: { x: h.sub[0], y: h.sub[1] }, ships: h.ships, torps: h.torps, decoys: h.decoys || [],
+      turn: t, replaying: t < S.turn, sub: { x: h.sub[0], y: h.sub[1], deep: h.deep }, ships: h.ships, torps: h.torps, decoys: h.decoys || [], critters: h.critters || [],
       buoys: S.buoys.filter(b => b.born <= t),
       marks: S.allMarks.filter(m => m.born <= t && t - m.born <= MAX_AGE).map(m => Object.assign({}, m, { age: t - m.born })),
       trail: S.hist.slice(0, t + 1).filter(Boolean).map(x => x.sub),
@@ -1283,7 +1407,7 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
         ctx.beginPath(); ctx.moveTo(cx, cy - rr); ctx.lineTo(cx + rr, cy); ctx.lineTo(cx, cy + rr); ctx.lineTo(cx - rr, cy); ctx.closePath(); ctx.fill(); ctx.stroke();
         ctx.fillStyle = col; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
         ctx.font = `500 ${Math.max(9, cs * 0.4)}px 'IBM Plex Mono', monospace`;
-        ctx.fillText(on ? `${b.id}·${activeLast(b) - S.turn}` : b.id, cx + cs * 0.3, cy + cs * 0.15);
+        ctx.fillText(on ? `${tag(b)}·${activeLast(b) - S.turn}` : tag(b), cx + cs * 0.3, cy + cs * 0.15);
         return;
       }
       ctx.setLineDash([2, 6]); ctx.strokeStyle = rgba(C.phos, 0.18); ctx.lineWidth = 1;
@@ -1292,7 +1416,7 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
       ctx.beginPath(); ctx.arc(cx, cy, Math.max(4, cs * 0.26), 0, Math.PI * 2); ctx.fill(); ctx.stroke();
       ctx.fillStyle = C.phos; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
       ctx.font = `500 ${Math.max(9, cs * 0.4)}px 'IBM Plex Mono', monospace`;
-      ctx.fillText(b.id, cx + cs * 0.3, cy + cs * 0.15);
+      ctx.fillText(tag(b), cx + cs * 0.3, cy + cs * 0.15);
     });
 
     // convoy
@@ -1363,6 +1487,7 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
       ctx.setLineDash([5, 5]); ctx.lineWidth = 1.25;
       if (mode === 'ping') {
         ctx.strokeStyle = rgba(C.amber, 0.6); ctx.beginPath(); ctx.arc(cx, cy, ACTIVE_R * cs, 0, Math.PI * 2); ctx.stroke();
+        ctx.strokeStyle = rgba(C.amber, 0.3); ctx.beginPath(); ctx.arc(cx, cy, ACTIVE_X * cs, 0, Math.PI * 2); ctx.stroke();
         ctx.setLineDash([2, 7]); ctx.strokeStyle = rgba(C.amber, 0.22); ctx.beginPath(); ctx.arc(cx, cy, COUNTER_R * cs, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([5, 5]);
       }
       if (mode === 'buoy') { ctx.strokeStyle = rgba(C.phos, 0.5); ctx.beginPath(); ctx.arc(cx, cy, PASSIVE_R * cs, 0, Math.PI * 2); ctx.stroke(); }
@@ -1398,7 +1523,17 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
         ctx.fillStyle = rgba(C.bio, 0.9); ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
         ctx.font = `500 ${Math.max(8, cs * 0.34)}px 'IBM Plex Mono', monospace`; ctx.fillText('decoy', X + rr + 3, Y);
       });
+      S.critters.forEach(c => {
+        const X = cxp(c.x), Y = cyp(c.y);
+        ctx.fillStyle = rgba(C.bio, c.vocal ? 0.85 : 0.4);
+        ctx.beginPath(); ctx.arc(X, Y, Math.max(2.5, cs * 0.14), 0, Math.PI * 2); ctx.fill();
+        ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+        ctx.font = `500 ${Math.max(8, cs * 0.32)}px 'IBM Plex Mono', monospace`; ctx.fillText(c.name, X + cs * 0.25, Y);
+      });
       const X = cxp(Math.max(S.sub.x, 0)), Y = cyp(S.sub.y);
+      ctx.fillStyle = rgba(C.fg, 0.8); ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+      ctx.font = `500 ${Math.max(8, cs * 0.34)}px 'IBM Plex Mono', monospace`;
+      ctx.fillText(S.sub.deep ? 'deep' : 'shallow', X, Y + cs * 0.32);
       ctx.fillStyle = S.replaying ? C.red : S.over.result === 'win' ? C.phos : C.red;
       ctx.beginPath(); ctx.ellipse(X, Y, cs * 0.55, cs * 0.24, 0, 0, Math.PI * 2); ctx.fill();
       ctx.fillRect(X - cs * 0.08, Y - cs * 0.42, cs * 0.18, cs * 0.25);
@@ -1442,6 +1577,8 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
   cv.addEventListener('pointerleave', () => { if (!drag) { hover = null; render(); } });
   cv.addEventListener('click', e => { if (mode === 'plot') return; const c = cellAt(e); if (c) act(mode, c); });
   $('#m-plot').addEventListener('click', () => setMode('plot'));
+  $('#dep-shallow').addEventListener('click', () => setDepth(false));
+  $('#dep-deep').addEventListener('click', () => setDepth(true));
   $('#plot-undo').addEventListener('click', () => { if (canPlot() && S.plot.length) { S.plot.pop(); render(); } });
   $('#plot-clear').addEventListener('click', () => { if (canPlot() && S.plot.length) { S.plot = []; render(); } });
   $('#m-ping').addEventListener('click', () => setMode('ping'));
@@ -1488,6 +1625,7 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
     else if (e.key === '2') setMode('buoy');
     else if (e.key === '3') setMode('charge');
     else if (e.key === '4') setMode('plot');
+    else if (e.key === 'd' || e.key === 'D') setDepth(!buoyDeep);
     else if (e.key === 'w' || e.key === 'W' || e.key === ' ') { if (e.key === ' ') e.preventDefault(); act('wait'); }
   });
 
