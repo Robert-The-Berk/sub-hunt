@@ -21,6 +21,12 @@ Press **4** or pick **Plot** to mark up the table yourself. It's free and doesn'
 ## Replay
 When a hunt ends, **Watch replay** plays it back turn by turn: the sub's course, every buoy drop, ping return, bearing, torpedo and depth charge, with that turn's events underneath. Scrub with the slider or pause.
 
+## How the sub thinks
+- **It hears splashes.** A buoy dropped within about 8 nmi (5 nmi if the sub is below the layer) may alert it. It remembers roughly where the buoy went in and steers around it. Drop buoys well ahead of it or off its track.
+- **It weaves.** It runs to the escape line in zigzag legs and changes its escape point now and then, more often after a scare.
+- **It flanks the convoy.** It comes in from one side, aiming ahead of the ships, then closes for the shot.
+- **It reacts in character.** When spooked by a splash, a ping or a charge, the quiet boats (Whisper, Minnow, Red October) usually go silent and creep away; Leviathan and Barracuda usually sprint in a short, loud burst.
+
 ## Thermal layer
 A strong thermal layer splits the ocean into shallow and deep water. Set each buoy **shallow** or **deep** before dropping it (the toggle under the toolbar, or key **D**). Deep buoys are marked ↓.
 - Across the layer, passive buoys hear about a third as well, and active pings reach only 6 nmi (instead of 10) with a weaker echo. The sub's own hearing of your pings is cut across the layer too, from 24 nmi to 14.
@@ -53,10 +59,10 @@ A win earns 1 star, 2 stars from 2,000 points and 3 stars from 2,600 (1,250 and 
 Five missions in a row (**Shakedown**, **Quiet Water**, **Fast Mover**, **Needle** and **Ghost**) drawing from one supply pool: 18 active buoys, 26 passive buoys and 18 depth charges. Each mission takes up to the normal loadout from the pool. Unused gear goes back afterwards, and each win adds +2 active, +3 passive and +2 charges. You can retry a failed mission, but what you spent is gone. If the pool runs out of charges, the campaign is over. Progress, the campaign score and your best campaign are saved in the browser. Starting a mission takes its gear from the pool straight away, so leaving mid-mission forfeits it.
 
 ## Subs
-| Sub | Size | Speed | Active | Passive | Torpedoes | Decoys | Prefers |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| Leviathan | Huge | Medium | Easy | Fair | 2 | 2 | Deep |
-| Whisper | Medium | Slow | Fair | Hard | 4 | 3 | Shallow |
-| Barracuda | Small | Fast | Hard | Easy | 4 | 3 | Deep |
-| Minnow | Tiny | Very slow | Very hard | Very hard | 2 | 1 | Shallow |
-| Red October (secret) | Huge | Medium | Easy | Very hard | 0 | 1 | Deep |
+| Sub | Size | Speed | Active | Passive | Torpedoes | Decoys | Prefers | When spooked |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Leviathan | Huge | Medium | Easy | Fair | 2 | 2 | Deep | Usually sprints |
+| Whisper | Medium | Slow | Fair | Hard | 4 | 3 | Shallow | Usually creeps |
+| Barracuda | Small | Fast | Hard | Easy | 4 | 3 | Deep | Usually sprints |
+| Minnow | Tiny | Very slow | Very hard | Very hard | 2 | 1 | Shallow | Usually creeps |
+| Red October (secret) | Huge | Medium | Easy | Very hard | 0 | 1 | Deep | Usually creeps |

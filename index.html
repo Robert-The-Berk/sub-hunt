@@ -277,6 +277,7 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
             <li><b>The sub hears pings much further away</b> than you can hear echoes: out to 24 nmi (12 squares, the faint outer ring when you aim). When it hears one it speeds up and steers to stay out of that buoy's range, so drop them where it has to go, not where it is.</li>
             <li><b>No return</b> doesn't prove the sub isn't there. A small sub can sit inside the circle and still not echo.</li>
             <li><b>Sonobuoys</b> (teal) listen silently every turn up to 16 nmi away and report a bearing, not a range. Fast subs are loud; slow ones are hard to hear.</li>
+            <li><b>The sub is smart</b>: it hears a buoy splash within about 8 nmi (less if it is deep), remembers where it went in and steers around it, so drop buoys well ahead of it or off its track. It weaves toward the escape line, changes its escape point, and comes at the convoy from a flank. When spooked, quiet boats usually go silent and creep off; loud ones sprint in short bursts.</li>
             <li><b>Thermal layer</b>: the ocean has a layer that bends sound. Each buoy is set shallow or deep (key D). Across the layer, passive buoys hear only about a third as well, and active pings reach only 6 nmi with a weaker echo. The sub picks a side and may slip across the layer when it is pinged, and a nearby buoy may hear its hull pop as it changes depth. Shallow buoys hear the convoy loudly; deep ones much less.</li>
             <li><b>Sea life</b>: whales, dolphins and snapping shrimp make noise too. Each sounds different in the log and looks different on the waterfall: whale song comes and goes in broad bands, dolphins flicker and move fast, shrimp crackle steadily near rocks, and a sperm whale clicks in a broken line. Whales can even return an echo. With Jonesy on watch, he names them.</li>
             <li><b>Decoys</b>: when a ping catches it or a charge lands close, the sub may drop a noisemaker and creep away deep and slow. A decoy echoes like a hull, but passive buoys hear broadband noise with no blade rate, its waterfall trace is broad and smeared, and it barely moves. A short mechanical transient on a buoy can mean one was just launched.</li>
@@ -302,25 +303,26 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
   const BUOYS = 8, ACTIVE_BUOYS = 6, ACTIVE_LIFE = 4, COUNTER_R = 12, CHARGES = 6, ATTACK_R = 4, TORP_SPD = 3, TORP_HIT = 0.7, CONVOY_SPD = 0.8, MOVE_SCALE = 1.5, CONVOY_N = 4, MIN_CS = 15;
   const SHIP_NAMES = ['MV Aurora', 'MV Kestrel', 'SS Halcyon', 'MV Northern Star', 'MV Saltire', 'SS Meridian', 'MV Bluebell', 'MV Cormorant'];
   const LM = 24, TM = 18;
+  const SPLASH_R = 4, SPLASH_DEEP = 2.5, BURST = 2;
   const LAYER_X = 0.35, ACTIVE_X = 3, COUNTER_X = 7, DEEP_SHIP = 0.4;
   const DECOY_LIFE = 5, DECOY_NOISE = 0.7, DECOY_ECHO = 0.85, CREEP = 3;
   const WF_BINS = 90, WF_LINES = 4, WF_KEEP = 2400, WF_SHIP_R = 14;
 
   const TYPES = {
     leviathan: { name: 'Leviathan', cls: 'Ballistic missile submarine', size: 'Huge', sizeN: 4, speedLabel: 'Medium',
-      cruise: 0.55, sprint: 0.85, noise: 1.0, activeP: 0.95, torps: 2, aggr: 0.3, decoys: 2, deep: true,
+      cruise: 0.55, sprint: 0.85, noise: 1.0, activeP: 0.95, torps: 2, aggr: 0.3, decoys: 2, deep: true, quiet: 0.3,
       blurb: 'A giant missile boat. It echoes like a cathedral on active sonar, and it is loud enough to hear when it hurries.' },
     whisper: { name: 'Whisper', cls: 'Diesel-electric attack boat', size: 'Medium', sizeN: 3, speedLabel: 'Slow',
-      cruise: 0.45, sprint: 0.8, noise: 0.85, activeP: 0.75, torps: 4, aggr: 0.5, decoys: 3, deep: false,
+      cruise: 0.45, sprint: 0.8, noise: 0.85, activeP: 0.75, torps: 4, aggr: 0.5, decoys: 3, deep: false, quiet: 0.75,
       blurb: 'Running on batteries it is almost silent. Pings will usually find it; buoys will struggle.' },
     barracuda: { name: 'Barracuda', cls: 'Fast attack submarine', size: 'Small', sizeN: 2, speedLabel: 'Fast',
-      cruise: 1.0, sprint: 1.4, noise: 1.0, activeP: 0.5, torps: 4, aggr: 0.6, decoys: 3, deep: true,
+      cruise: 1.0, sprint: 1.4, noise: 1.0, activeP: 0.5, torps: 4, aggr: 0.6, decoys: 3, deep: true, quiet: 0.25,
       blurb: 'Small and quick. Its screws scream on passive sonar, but its hull often slips past a ping.' },
     minnow: { name: 'Minnow', cls: 'Midget submarine', size: 'Tiny', sizeN: 1, speedLabel: 'Very slow',
-      cruise: 0.35, sprint: 0.6, noise: 0.8, activeP: 0.3, torps: 2, aggr: 0.45, decoys: 1, deep: false,
+      cruise: 0.35, sprint: 0.6, noise: 0.8, activeP: 0.3, torps: 2, aggr: 0.45, decoys: 1, deep: false, quiet: 0.8,
       blurb: 'Tiny and patient. Hard to hear, hard to echo. It takes a long time to reach the line, so you will need that time.' },
     october: { name: 'Red October', cls: 'Typhoon-class, caterpillar drive', size: 'Huge', sizeN: 4, speedLabel: 'Medium',
-      cruise: 0.6, sprint: 0.8, noise: 0.1, activeP: 0.95, torps: 0, aggr: 0, decoys: 1, deep: true, secret: true,
+      cruise: 0.6, sprint: 0.8, noise: 0.1, activeP: 0.95, torps: 0, aggr: 0, decoys: 1, deep: true, quiet: 0.85, secret: true,
       blurb: 'Captain Marko Ramius is running west. The caterpillar drive makes her nearly silent. Moscow wants her sunk. Find her first and hail her.' }
   };
   const CAMPAIGN = [
@@ -446,7 +448,8 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
     S = {
       T, tid, hidden, rocks, label, lane, ships, torps: [], subTorps: T.torps, decoys: [], subDecoys: T.decoys, decoysUsed: 0, decoyCool: 0, decoyNew: null, creep: 0, cool: 0, atk: null, fired: false,
       sub: { x: sx, y: sy, ty: 2 + Math.floor(rand() * (ROWS - 4)), acc: 0, spd: T.cruise, deep: T.deep },
-      layerCool: 0, crossed: false, critters: genCritters(rocks, label),
+      layerCool: 0, crossed: false, burst: 0, known: [], leg: null, legUntil: 0,
+      flank: (rand() < 0.5 ? -1 : 1) * (3 + Math.floor(rand() * 3)), critters: genCritters(rocks, label),
       trail: [[sx, sy]], alert: 0, noise: null, ivan: 0, ivanNow: false, ivanSaid: false, octSaid: false,
       turn: 0, pings: 0, actives: 0, activeLeft: load.a, heard: [], buoys: [], buoysLeft: load.p, charges: load.c, load, camp: cfg.camp == null ? null : cfg.camp, decoyHits: 0, mission, marks: [], allMarks: [], hist: [], plot: [], log: [], over: null, contacts: 0, lastContact: null
     };
@@ -510,6 +513,7 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
     S.marks.forEach(m => m.age++);
     S.marks = S.marks.filter(m => m.age <= MAX_AGE);
 
+    if (kind === 'ping' || kind === 'buoy') splash(c);
     if (kind === 'ping') dropActive(c);
     else if (kind === 'buoy') {
       const id = 'B' + (S.buoys.filter(b => b.kind === 'passive').length + 1);
@@ -553,6 +557,44 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
   const pinging = (b, t) => b.kind === 'active' && t >= b.born && t <= activeLast(b);
 
   function contact() { S.contacts++; S.lastContact = S.turn; }
+
+  // ---------- sub awareness ----------
+  // Something alarming at (x, y): steer away for a while and react in character, either a short sprint
+  // or going quiet and creeping off. A fresh scare may also make it pick a new escape point and flank.
+  function spook(x, y, turns) {
+    const fresh = S.burst <= 0 && S.creep <= 0 && S.alert <= 0;
+    S.alert = Math.max(S.alert, turns); S.noise = { x, y };
+    if (!fresh) return;
+    if (rand() < S.T.quiet) S.creep = Math.max(S.creep, 3); else S.burst = BURST;
+    if (rand() < 0.35) newEscape();
+    if (rand() < 0.3) S.flank = -S.flank;
+  }
+  function splash(c) {
+    const sub = S.sub, d = Math.hypot(sub.x - c.x, sub.y - c.y);
+    if (d > (sub.deep ? SPLASH_DEEP : SPLASH_R) || rand() > 0.8) return;
+    S.known.push({ x: c.x + gauss() * 0.7, y: c.y + gauss() * 0.7 });
+    spook(c.x, c.y, 2);
+  }
+  function newEscape() {
+    S.sub.ty = 1 + Math.floor(rand() * (ROWS - 2));
+    S.leg = null;
+  }
+  // zigzag legs toward the escape line rather than one straight run
+  function legPoint() {
+    const sub = S.sub;
+    if (!S.leg || S.turn >= S.legUntil || Math.hypot(S.leg.x - sub.x, S.leg.y - sub.y) < 1.5) {
+      const x = sub.x - (6 + rand() * 6);
+      S.leg = x <= 2 ? { x: -1, y: sub.ty } : { x, y: Math.max(1, Math.min(ROWS - 2, sub.ty + gauss() * 5)) };
+      S.legUntil = S.turn + 8;
+    }
+    return S.leg;
+  }
+  // come in on a flank and aim ahead of the ship, then close for the shot
+  function approachPoint(ship) {
+    const sub = S.sub, d = Math.hypot(ship.x - sub.x, ship.y - sub.y);
+    if (d > 6) return { x: Math.min(COLS - 1, ship.x + Math.max(2, Math.min(8, d * 0.5))), y: Math.max(0, Math.min(ROWS - 1, ship.y + S.flank)) };
+    return { x: ship.x + 2, y: ship.y + Math.sign(S.flank) * 1.5 };
+  }
 
   function dropActive(c) {
     S.actives++; S.activeLeft--;
@@ -609,9 +651,8 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
     if (quiet.length) log(`${quiet.join(', ')}: pinging, no return.`, 'dim');
     if (S.heard.length) {
       // the sub counter-detects the pings and runs from the closest one
-      S.alert = Math.max(S.alert, 3);
       const n = S.heard.reduce((a, h) => h.d < a.d ? h : a);
-      S.noise = { x: n.x, y: n.y };
+      spook(n.x, n.y, 3);
       if (n.d <= ACTIVE_R + 1 && rand() < 0.6) launchDecoy();
       // slip across the layer, away from the side the pings are on
       const nb = live.reduce((a, b) => Math.hypot(b.x - sub.x, b.y - sub.y) < Math.hypot(a.x - sub.x, a.y - sub.y) ? b : a);
@@ -654,7 +695,7 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
     if (hitDecoy && !oct) {
       S.decoys = S.decoys.filter(q => q !== hitDecoy); S.decoyHits++;
       log(`Charge at ${gridName(c)}: the noise source cut out, but no breaking-up sounds. A decoy.`, 'red');
-      S.alert = 4; S.noise = { x: c.x, y: c.y };
+      spook(c.x, c.y, 4);
       if (near) launchDecoy();
       if (S.charges === 0) end('lose', 'You are out of depth charges. The sub will reach the escape line unopposed.');
       return false;
@@ -663,7 +704,7 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
     if (near && rand() < 0.4) crossLayer();
     if (oct) log(near ? `Hail at ${gridName(c)}: no answer, but sonar hears something close.` : `Hail at ${gridName(c)}: no answer.`, 'red');
     else log(near ? `Charge at ${gridName(c)}: near miss. Hull popping noises close by.` : `Charge at ${gridName(c)}: miss.`, 'red');
-    S.alert = 4; S.noise = { x: c.x, y: c.y };
+    spook(c.x, c.y, 4);
     if (S.charges === 0) end('lose', oct ? 'You ran out of hails. Red October went quiet and slipped away.' : 'You are out of depth charges. The sub will reach the escape line unopposed.');
     return false;
   }
@@ -672,12 +713,14 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
     const T = S.T, sub = S.sub;
     if (S.ivan === 0 && S.turn > 2 && rand() < 0.07) { S.ivan = 2; S.ivanSaid = false; }
     S.ivanNow = S.ivan > 0;
-    sub.spd = S.creep > 0 ? T.cruise * 0.6 : S.alert > 0 ? T.sprint : T.cruise;
+    sub.spd = S.creep > 0 ? T.cruise * 0.6 : S.burst > 0 ? T.sprint : S.alert > 0 ? Math.min(T.sprint, T.cruise * 1.15) : T.cruise;
     S.atk = S.creep > 0 ? null : subTarget();
     sub.acc += sub.spd * MOVE_SCALE; // bigger ocean, same noise: squares cover ground faster than the speed rating
     while (sub.acc >= 1 && !S.over) { sub.acc -= 1; step(); }
     if (S.ivan > 0) S.ivan--;
     if (S.creep > 0) S.creep--;
+    if (S.burst > 0) S.burst--;
+    if (rand() < 0.03) newEscape();
     if (S.decoyCool > 0) S.decoyCool--;
     if (S.layerCool > 0) S.layerCool--;
     else if (rand() < 0.02) crossLayer();
@@ -749,7 +792,7 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
     const AVOID = ACTIVE_R + 1.5;
     const exposed = S.heard.some(h => Math.hypot(sub.x - h.x, sub.y - h.y) < AVOID);
     if (atk && !exposed && Math.hypot(atk.x - sub.x, atk.y - sub.y) <= 2.5) return; // in firing position: hold and stay quiet
-    const tgt = S.ivanNow ? { x: sub.x + 6, y: sub.y } : atk ? { x: atk.x + 2, y: atk.y } : { x: -1, y: sub.ty };
+    const tgt = S.ivanNow ? { x: sub.x + 6, y: sub.y } : atk ? approachPoint(atk) : legPoint();
     let best = null, bs = Infinity;
     for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) {
       if (!dx && !dy) continue;
@@ -760,6 +803,7 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
       let s = Math.hypot(nx - tgt.x, ny - tgt.y) + rand() * 1.3;
       if (S.alert > 0 && S.noise) s -= 0.5 * Math.hypot(nx - S.noise.x, ny - S.noise.y);
       S.heard.forEach(h => { const d = Math.hypot(nx - h.x, ny - h.y); if (d < AVOID) s += (AVOID - d) * 1.5; });
+      S.known.forEach(k => { const d = Math.hypot(nx - k.x, ny - k.y); if (d < 4) s += (4 - d) * 0.8; }); // keeps clear of buoys it heard splash
       if (s < bs) { bs = s; best = [nx, ny]; }
     }
     if (!best) return;
