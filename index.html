@@ -273,7 +273,7 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
         <details class="help">
           <summary>How to play</summary>
           <ul>
-            <li><b>Active buoys</b> (amber): drop one on a square and it pings every turn for 4 turns. If the sub is within 10 nmi (5 squares) of it, you may get a return showing its range as a ring. Big subs echo reliably; small ones often don't.</li>
+            <li><b>Active buoys</b> (amber): drop one on a square and it takes a turn to deploy, then pings every turn for 5 turns. Its ring shows faint until the first ping. If the sub is within 10 nmi (5 squares) of it, you may get a return showing its range as a ring. Big subs echo reliably; small ones often don't.</li>
             <li><b>The sub hears pings much further away</b> than you can hear echoes: out to 24 nmi (12 squares, the faint outer ring when you aim). When it hears one it speeds up and steers to stay out of that buoy's range, so drop them where it has to go, not where it is.</li>
             <li><b>No return</b> doesn't prove the sub isn't there. A small sub can sit inside the circle and still not echo.</li>
             <li><b>Sonobuoys</b> (teal) listen silently every turn up to 16 nmi away and report a bearing, not a range. Fast subs are loud; slow ones are hard to hear.</li>
@@ -300,7 +300,7 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
 <script>
 (() => {
   const COLS = 40, ROWS = 26, ACTIVE_R = 5, PASSIVE_R = 8, NM = 2, MAX_AGE = 6;
-  const BUOYS = 8, ACTIVE_BUOYS = 6, ACTIVE_LIFE = 4, COUNTER_R = 12, CHARGES = 6, ATTACK_R = 4, TORP_SPD = 3, TORP_HIT = 0.7, CONVOY_SPD = 0.8, MOVE_SCALE = 1.5, CONVOY_N = 4, MIN_CS = 15;
+  const BUOYS = 8, ACTIVE_BUOYS = 6, ACTIVE_LIFE = 5, ACTIVE_DELAY = 1, COUNTER_R = 12, CHARGES = 6, ATTACK_R = 4, TORP_SPD = 3, TORP_HIT = 0.7, CONVOY_SPD = 0.8, MOVE_SCALE = 1.5, CONVOY_N = 4, MIN_CS = 15;
   const SHIP_NAMES = ['MV Aurora', 'MV Kestrel', 'SS Halcyon', 'MV Northern Star', 'MV Saltire', 'SS Meridian', 'MV Bluebell', 'MV Cormorant'];
   const LM = 24, TM = 18;
   const SPLASH_R = 4, SPLASH_DEEP = 2.5, BURST = 2;
@@ -551,10 +551,11 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
       critters: S.critters.map(c => ({ k: c.k, name: c.name, x: c.x, y: c.y, vocal: c.vocal }))
     };
   }
-  const activeLast = b => b.born + ACTIVE_LIFE - 1;
+  const activeFirst = b => b.born + ACTIVE_DELAY; // a turn to sink and deploy before the first ping
+  const activeLast = b => activeFirst(b) + ACTIVE_LIFE - 1;
   const same = (b, deep) => !!b.deep === !!deep;
   const tag = b => b.id + (b.deep ? '↓' : '');
-  const pinging = (b, t) => b.kind === 'active' && t >= b.born && t <= activeLast(b);
+  const pinging = (b, t) => b.kind === 'active' && t >= activeFirst(b) && t <= activeLast(b);
 
   function contact() { S.contacts++; S.lastContact = S.turn; }
 
@@ -600,7 +601,7 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
     S.actives++; S.activeLeft--;
     const id = 'A' + S.actives;
     S.buoys.push({ x: c.x, y: c.y, id, kind: 'active', born: S.turn, deep: buoyDeep });
-    log(`Active buoy ${id} in the water at ${gridName(c)}, set ${buoyDeep ? 'deep' : 'shallow'}. Pinging for ${ACTIVE_LIFE} turns.`, 'amber');
+    log(`Active buoy ${id} in the water at ${gridName(c)}, set ${buoyDeep ? 'deep' : 'shallow'}. First ping next turn, then ${ACTIVE_LIFE} pings in all.`, 'amber');
     if (S.actives === 1 && S.tid === 'october') log('Jonesy: Every ping carries a long way, Captain. She will hear it well before we hear her.', 'quote');
   }
 
@@ -1444,7 +1445,7 @@ details.help ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direc
       if (b.kind === 'active') {
         const on = S.turn <= activeLast(b), col = on ? C.amber : C.muted, rr = Math.max(4, cs * 0.28);
         if (on) {
-          ctx.setLineDash([4, 5]); ctx.strokeStyle = rgba(C.amber, 0.4); ctx.lineWidth = 1;
+          ctx.setLineDash([4, 5]); ctx.strokeStyle = rgba(C.amber, S.turn < activeFirst(b) ? 0.18 : 0.4); ctx.lineWidth = 1;
           ctx.beginPath(); ctx.arc(cx, cy, ACTIVE_R * cs, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
         }
         ctx.fillStyle = C.bg; ctx.strokeStyle = col; ctx.lineWidth = 2;

@@ -5,7 +5,7 @@ A turn-based submarine hunt on a 40×26 sonar plotting table. An enemy sub is st
 Open `index.html` in a browser to play. No build step.
 
 ## Sensors
-- **Active buoys** (6): drop one and it pings every turn for 4 turns. A ping returns a range ring only if the sub is within 10 nmi, and only as often as the sub's size allows.
+- **Active buoys** (6): drop one and it takes a turn to deploy, then pings every turn for 5 turns. A ping returns a range ring only if the sub is within 10 nmi, and only as often as the sub's size allows.
 - **Counter-detection**: the sub hears pings out to 24 nmi, much further than you can hear its echo. When it does, it sprints and steers to stay out of that buoy's range, so lay active buoys where it has to go.
 - **Passive buoys** (8): silent, report a bearing up to 16 nmi. Fast subs are loud; slow subs are quiet.
 
